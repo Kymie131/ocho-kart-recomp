@@ -10,42 +10,35 @@ Updated 2026-10-02.
 | 0.5 dump audit | done |
 | 1 xex analysis | done |
 | 2 UE3 catalog | not started |
-| 3 compile recomp C++ | **done** — compiles, links, starts |
+| 3 compile recomp C++ | done |
 | 4 shaders | not started |
-| 5 kernel shims / boot | **in progress** — boots deep into init, class-B functions bulk-added |
+| 5 kernel shims / boot | done (runs stable) |
+| 6 renderer | next (no picture yet) |
 
-## Phase 3 result
+## Phase 5 result
 
-Codegen sealed all functions. Built with clang 23.1.1 + Ninja against prebuilt ReXGlue SDK 0.10.0. Linked `ocho_kart.exe` (110 MB). Fix: `src/main.cpp` include path (`generated/ocho_kart_init.h`).
+The game boots and **runs stably** (60s, no fatal). It loads the XEX, registers the recompiled functions, resolves all 307 signed imports, initializes audio, and walks the intro asset sequence (disclaimer, UE3 logo, game logos).
 
-## Phase 5 result (this session)
+No GPU plugin is loaded, so there is no picture yet — that is Phase 6.
 
-Runtime boots, mounts the dump at `game:`, loads the XEX, registers ~73500 functions, resolves all 307 signed imports, and runs the game's startup (filesystem probes, movie list `VIDEODEMO.bik` / `LOGO_*.xxx` / `INTRO.xxx`).
+Remaining (non-fatal) warnings: the game probes movie/splash paths (`D:\ChavoKartGame\Movies\*`, `Splash.bmp`) that the VFS does not resolve. Path/device mapping for those assets is pending.
 
-### Root cause of the "unregistered function" crashes — resolved in bulk
+## How the boot was stabilised
 
-The crashes were functions **not discovered by codegen** because they are only reachable through function pointers / vtables (never via a `bl`). Two sub-classes:
+Runtime crashed repeatedly with `Call to invalid or unregistered function` on functions that codegen cannot discover because they are reached only through pointers/vtables (never via a `bl`). `tools/peel.ps1` reads each crash address from the boot log, sizes it (next registered function start), appends it to `[entrypoint.functions]`, and reruns codegen+build+boot. Added this way:
 
-- **A (in PDATA)**: PDATA has 52365 function starts in the code range; after the fix all are registered.
-- **B (not in PDATA)**: vtable slots, adjustor thunks, veneers, leaf getters. Found by scanning `.rdata`/`.data` for dwords pointing into `.text` at unregistered, 4-aligned addresses → **479 candidates**.
+```
+0x82B3F920 (setter, 8)
+0x82A8E828 (16)
+0x82A62EE8 (16)
+0x82ADB388 (16)
+```
 
-`tools/gen-ptr-funcs.ps1` generates `[entrypoint.functions]` entries for those 479 (size = next known start in the combined set, to avoid overlaps). Adding them advanced the boot past the previous crashes.
+Earlier manual entries in the same category are also in the manifest (vtable thunks, getters, veneers).
 
-### Known issue with the bulk entries
+A bulk alternative (`tools/gen-ptr-funcs.ps1`, scan data sections for code pointers) added 479 entries but produced false positives that broke hundreds of branches, so it was reverted. The directed peel is the working method.
 
-Some of the 479 candidates are **false positives** (data that looks like a code pointer). Declaring them creates a few wrong function boundaries, which show up as codegen `Unresolved branch` warnings and runtime `Unresolved branch from X to Y`. Observed:
-
-- codegen: `Unresolved function 0x83238D88 from 0x83238EB8`
-- codegen: `Unresolved conditional branch to 0x83240964 from 0x83240BD8`
-- runtime: `[FATAL] Unresolved branch from 0x830DEE1C to 0x830DEED4`
-
-The three targets (0x830DEED4, 0x83238D88, 0x83240964) are `0x00000000` padding → not real functions. So the fix is to **prune false-positive candidates** or give those enclosing functions correct sizes, not to add the targets.
-
-### Tools
-
-- `tools/boot-loop.ps1` — manifest sync + codegen + build + run.
-- `tools/gen-ptr-funcs.ps1` — scan data sections for pointer targets, append manifest entries (`-Append`).
-- `tools/peel.ps1` — auto-peel single crash (has a double-run bug; superseded by the bulk approach).
+Ironically the additions made earlier this session (before the bulk) were kept because they were verified by the runtime reaching past them.
 
 ## Paths
 
@@ -56,10 +49,14 @@ The three targets (0x830DEED4, 0x83238D88, 0x83240964) are `0x00000000` padding 
 | Prebuilt SDK | `C:\ProgramData\rexglue-sdk-bin` (v0.10.0) |
 | ReXGlue analyzer | `C:\ProgramData\rextools\rexglue.exe` v0.10.0 |
 | Manifest | `tools/config/ocho_kart_manifest.toml` |
+| Build | `tools/build.ps1` |
+| Codegen+build+run loop | `tools/boot-loop.ps1` |
+| Directed crash peeler | `tools/peel.ps1` |
 | Signed imports | `docs/toolchain/xex-imports-signed.md` |
 
 ## Next
 
-1. Prune false-positive `ptr_*` entries in the manifest (or correct the few bad sizes) so codegen reports 0 unresolved branches.
-2. Re-run `boot-loop`; iterate until the menu.
-3. If bulk pruning is painful: revert the 479 block and instead drive discovery from actual unresolved `bl`/`b` targets only.
+1. Phase 6: load the GPU plugin / native renderer to get a picture. Then see how far the menu is.
+2. Fix the movie/splash path mapping so intro assets load.
+3. Phase 2 (UModel catalog) in parallel.
+4. Keep `tools/peel.ps1` handy — new code paths may hit more undiscovered pointer functions.
