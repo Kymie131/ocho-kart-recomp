@@ -20,7 +20,7 @@ Updated 2026-10-02.
 
 | Thing | Where |
 |---|---|
-| User dump | `…/Proyecto_descompilacion/EL CHAVO KART/default.xex` |
+| User dump | local `EL CHAVO KART/default.xex` (path set at codegen time) |
 | Analysis project + generated C++ | `%ProgramData%\rextools\proj-ocho-kart\` (not in git) |
 | XexTool-RE build | temp dir (not in git) |
 | ReXGlue prebuilt | `C:\ProgramData\rextools\rexglue.exe` v0.10.0 |
