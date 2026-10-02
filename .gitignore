@@ -50,7 +50,7 @@ Coalesced_*.bin
 *.iso
 *.god
 
-# Local editor / agent notes (not part of the public project)
+# Local notes (not part of the public project)
 CLAUDE.md
 AGENTS.md
 .opencode/
