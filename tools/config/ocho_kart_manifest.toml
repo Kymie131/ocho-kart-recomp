@@ -1,0 +1,55 @@
+# ReXGlue v0.10.0 codegen manifest - Ocho Kart Recomp
+#
+# v0.10.0 layout (src/codegen/manifest.cpp + config.cpp):
+#   [project]            required: name, optional sdk_version, game_root
+#   [entrypoint]         required: file_path, out_directory_path, and ANY
+#                        RecompilerConfig fields including [entrypoint.functions]
+#   [[modules]]          optional DLL modules
+#
+# CRITICAL: [functions] MUST be nested as [entrypoint.functions].
+# A top-level [functions] is a sibling table and is NEVER seen by
+# RecompilerConfig::LoadFromTable (which is called on the entrypoint table only).
+#
+# Reclassified call targets: vtable thunks / stubs in .text, not kernel imports.
+# Real imports: IAT 0x82000600-0x82000ACC, signed 307/307 in
+# docs/toolchain/xex-imports-signed.md.
+
+[project]
+name = "ocho_kart"
+sdk_version = "0.10.0"
+game_root = "C:/Users/israe/OneDrive/Documentos/REPOS/Proyecto_descompilacion/EL CHAVO KART"
+
+[entrypoint]
+file_path = "C:/Users/israe/OneDrive/Documentos/REPOS/Proyecto_descompilacion/EL CHAVO KART/default.xex"
+out_directory_path = "generated"
+includes = []
+
+# vtable thunks: lwz r11,0(r3); lwz r11,off(r11); mtctr r11; bctr  (16 B)
+[entrypoint.functions]
+0x82FBFBC0 = { name = "vtable_thunk_82FBFBC0", size = 16 }
+0x82FBFC38 = { name = "vtable_thunk_82FBFC38", size = 16 }
+0x82FBFCE8 = { name = "vtable_thunk_82FBFCE8", size = 16 }
+0x82FBFCF8 = { name = "vtable_thunk_82FBFCF8", size = 16 }
+0x82FBFD08 = { name = "vtable_thunk_82FBFD08", size = 16 }
+0x82FBFD18 = { name = "vtable_thunk_82FBFD18", size = 16 }
+0x82FBFD28 = { name = "vtable_thunk_82FBFD28", size = 16 }
+
+# short return / stub sequences
+0x82FB2774 = { name = "stub_82FB2774_ret0", size = 8 }
+0x82FB277C = { name = "stub_82FB277C_fcopy", size = 12 }
+0x82FCB148 = { name = "stub_82FCB148_notimpl", size = 16 }
+0x82FD097C = { name = "stub_82FD097C_ret0", size = 8 }
+0x82FD0A94 = { name = "stub_82FD0A94_ret0", size = 8 }
+
+# mid-function fragments still targeted by the call graph
+0x82FBFCB8 = { name = "frag_82FBFCB8_loop", size = 24 }
+0x82FBFDA8 = { name = "frag_82FBFDA8_stores", size = 12 }
+
+# branch-stub / jump-table style targets (b instruction + pad, seen in run 004)
+0x82B90068 = { name = "branch_stub_82B90068", size = 8 }
+0x82E514C8 = { name = "branch_stub_82E514C8", size = 8 }
+
+# real .text sequences the analyzer could not start at
+0x82E4D8D8 = { name = "code_82E4D8D8_branch", size = 8 }
+0x832C3910 = { name = "code_832C3910_fpload", size = 16 }
+0x832D9690 = { name = "code_832D9690_lwzchain", size = 16 }

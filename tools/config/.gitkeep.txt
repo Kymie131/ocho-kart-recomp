@@ -1,0 +1,1 @@
+# tools/config - ReXGlue analysis configs (function boundaries, jump tables). Filled in Phase 1.
