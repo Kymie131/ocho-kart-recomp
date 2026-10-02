@@ -39,6 +39,21 @@ includes = []
 # real function body containing the loop at 0x82FBFC9C (target of bne 0x82FBFCB8)
 0x82FBFC50 = { name = "func_82FBFC50_loop", end = 0x82FBFCD4 }
 
+# functions reached only via pointers/vtables that codegen did not discover
+# (hit at runtime: "Call to invalid or unregistered function").
+# Vtable region ~0x82B8AA00: adjustor thunks (addi r3,r3,-4; b) + methods.
+0x82BAEEB8 = { name = "sub_82BAEEB8_getter18", size = 8 }
+0x82B8AA00 = { name = "sub_82B8AA00_thunk", size = 8 }
+0x82B8AA10 = { name = "sub_82B8AA10_thunk", size = 8 }
+0x82B8AA18 = { name = "sub_82B8AA18_thunk", size = 8 }
+0x82B8AA20 = { name = "sub_82B8AA20_method", size = 248 }
+0x82405808 = { name = "sub_82405808_method", size = 24 }
+0x830F6C58 = { name = "sub_830F6C58_method", size = 352 }
+0x832431B0 = { name = "sub_832431B0_method", size = 100 }
+0x83243268 = { name = "sub_83243268_thunk", size = 12 }
+0x82928C08 = { name = "sub_82928C08_method", size = 20 }
+0x82B186B8 = { name = "sub_82B186B8_thunk", size = 24 }
+
 # short return / stub sequences
 0x82FB2774 = { name = "stub_82FB2774_ret0", size = 8 }
 0x82FB277C = { name = "stub_82FB277C_fcopy", size = 12 }
