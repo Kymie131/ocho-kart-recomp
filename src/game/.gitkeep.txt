@@ -1,0 +1,1 @@
+# src/game - Game-specific patches/hooks (Phase 3+).

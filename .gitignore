@@ -1,0 +1,77 @@
+# Build
+build/
+out/
+bin/
+obj/
+x64/
+Release/
+Debug/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+*.ilk
+*.pdb
+*.obj
+*.o
+
+# Generated recomp C++ (produced outside the repo or under build/)
+recompiled/
+tools/out/
+
+# User dump / extraction output — never commit game data
+/game/
+/dump/
+/iso/
+
+# Game content (legal dump stays on the user's machine)
+*.xex
+*.xxx
+*.upk
+*.u
+*.tfc
+*.utx
+*.usx
+*.uax
+*.umap
+Coalesced_*.bin
+*.toc
+*.fsb
+*.fsbcache
+*.xma
+*.bik
+*.bik2
+*.dds
+*.tga
+*.btf
+*.xdb
+*.stfs
+*.iso
+*.god
+
+# Local editor / agent notes (not part of the public project)
+CLAUDE.md
+AGENTS.md
+.opencode/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln.cache
+
+# Python
+__pycache__/
+*.py[cod]
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs / temp
+*.log
+*.tmp
