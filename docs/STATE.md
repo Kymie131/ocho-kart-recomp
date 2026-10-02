@@ -10,31 +10,40 @@ Updated 2026-10-02.
 | 0.5 dump audit | done |
 | 1 xex analysis | done |
 | 2 UE3 catalog | not started |
-| 3 compile recomp C++ | next — codegen output exists, not built yet |
+| 3 compile recomp C++ | **done** — compiles, links, starts |
+| 4 shaders | not started |
+| 5 kernel shims (boot to menu) | next |
 
-**Done (Phase 1):** import table signed 307/307 (`docs/toolchain/xex-imports-signed.md`); manifest with `[entrypoint.functions]` (`tools/config/ocho_kart_manifest.toml`); ReXGlue codegen emits C++ outside the repo.
+## Phase 3 result (2026-10-02)
 
-**Not done:** local compile; UE3 package map; kernel shims; anything that runs.
+Codegen sealed 73228/73228 functions (0 unresolved). Built with clang 23.1.1 + Ninja against the prebuilt ReXGlue SDK 0.10.0:
+
+- 302 recomp .cpp + init + register compile clean, 0 errors.
+- Linked `ocho_kart.exe` (110 MB) at
+  `%ProgramData%\rextools\proj-ocho-kart\out\build\win-amd64\ocho_kart.exe`.
+- Binary starts, loads the runtime, and runs (windowed app, no immediate crash).
+
+One scaffold fix was needed: `src/main.cpp` included `generated/default/ocho_kart_init.h`; the generated header is `generated/ocho_kart_init.h`.
 
 ## Paths
 
 | Thing | Where |
 |---|---|
 | User dump | local `EL CHAVO KART/default.xex` (path set at codegen time) |
-| Analysis project + generated C++ | `%ProgramData%\rextools\proj-ocho-kart\` (not in git) |
-| XexTool-RE build | temp dir (not in git) |
-| ReXGlue prebuilt | `C:\ProgramData\rextools\rexglue.exe` v0.10.0 |
-| Manifest for codegen | `tools/config/ocho_kart_manifest.toml` |
+| Analysis project + generated C++ + build | `%ProgramData%\rextools\proj-ocho-kart\` (not in git) |
+| Prebuilt SDK (link target) | `C:\ProgramData\rexglue-sdk-bin` (v0.10.0) |
+| ReXGlue analyzer | `C:\ProgramData\rextools\rexglue.exe` v0.10.0 |
+| Codegen manifest | `tools/config/ocho_kart_manifest.toml` |
+| Build script | `tools/build.ps1` |
 | Signed imports | `docs/toolchain/xex-imports-signed.md` |
+| Build log | `%ProgramData%\rextools\proj-ocho-kart\docs\build-run-002.log` |
 
 ## Blockers
 
-- **Phase 3 compile:** this machine's clang has no MSVC headers. Either install VS Build Tools (MSVC C++ workload) or build only on GitHub Actions. Pick one before wiring CMake to `generated/`.
-- **`frag_82FBFCB8_loop`:** does not seal (`beq` → 0x82FBFC9C outside 24 B window). Fix size/parent when touching the manifest again.
-- Some codegen Write partitions (~252–265) failed to write in the last run; ~612 files still landed. Re-run Write if Phase 3 needs a complete set.
+- None for building. The binary runs but has no game data path wired yet, so it does not reach gameplay.
+- Local build needs VS Build Tools (MSVC headers) for clang; already installed on this machine. GitHub Actions path still TBD.
 
 ## Next
 
-1. Decide MSVC local vs CI-only.
-2. Point CMake at generated output; compile until first link.
-3. In parallel: UModel over the 320 `.xxx` packages (notes only).
+1. Phase 5: run with the dump wired in (`game://`), implement the kernel shims the boot path hits, chase the first real crash, aim for the main menu. Source of truth for shims: `docs/toolchain/xex-imports-signed.md`.
+2. In parallel: UModel over the 320 `.xxx` packages (Phase 2, notes only).
