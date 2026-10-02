@@ -2,6 +2,15 @@
 
 Read `docs/roadmap.md` (phases) and `docs/STATE.md` (current state).
 
+## Setup
+
+Install the asset-blocking git hook (once per clone):
+
+```
+git config core.hooksPath scripts/hooks        # bash
+powershell -File scripts/install-hooks.ps1     # windows
+```
+
 ## Rules
 
 - **Never commit game assets** (`.xex`, `.xxx`, `.upk`, ISO, textures, audio, video, bytecode). Check `git diff --cached` before every commit.

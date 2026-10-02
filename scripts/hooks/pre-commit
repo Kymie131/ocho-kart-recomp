@@ -1,0 +1,49 @@
+#!/bin/sh
+# Reject commits that add game content or oversized files.
+# Install with: git config core.hooksPath scripts/hooks
+#
+# This project never ships game data. Each user brings their own legal dump.
+
+fail=0
+
+# Extensions that are always game content / derived assets
+blocked_ext="xex xxx upk u tfc utx usx uax umap fsb fsbcache xma bik bik2 dds tga btf xdb stfs iso god pkg xcp"
+
+# Names that are always off-limits
+blocked_name_re='(^|/)(default|base|default-base|default_base)\.(xex|exe)$|(^|/)Coalesced_.*\.bin$'
+
+# Max size (bytes) for a committed file. Raise deliberately if a real asset is needed.
+max_bytes=$((10 * 1024 * 1024))
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+for f in $staged; do
+    ext=$(printf '%s' "$f" | awk -F. 'NF>1{print tolower($NF)}')
+
+    case " $blocked_ext " in
+        *" $ext "*) echo "BLOCKED (game asset extension .$ext): $f"; fail=1 ;;
+    esac
+
+    if printf '%s' "$f" | grep -Eq "$blocked_name_re"; then
+        echo "BLOCKED (game file name): $f"
+        fail=1
+    fi
+
+    if [ -f "$f" ]; then
+        size=$(wc -c < "$f" | tr -d ' ')
+        if [ "$size" -gt "$max_bytes" ]; then
+            echo "BLOCKED (file > $((max_bytes / 1024 / 1024)) MB): $f ($size bytes)"
+            fail=1
+        fi
+    fi
+done
+
+if [ "$fail" -ne 0 ]; then
+    echo ""
+    echo "Commit aborted: the staged files look like game content."
+    echo "This repository does not distribute game assets. See CONTRIBUTING.md."
+    exit 1
+fi
+
+exit 0
