@@ -1,11 +1,18 @@
-# Run ReXGlue codegen on the local analysis project.
-# Generated C++ stays outside this repo (see .gitignore / STATE.md).
+# Run ReXGlue codegen on a local analysis project.
+# Generated C++ stays outside this repo.
 #
 # Usage:
-#   powershell -File tools/run-codegen.ps1
-#   powershell -File tools/run-codegen.ps1 -Force
+#   powershell -File tools/run-codegen.ps1 -DumpPath "C:/path/to/EL CHAVO KART"
+#   powershell -File tools/run-codegen.ps1 -DumpPath "..." -Force
+#
+# -DumpPath is the folder that contains default.xex. It is substituted into the
+# manifest that is copied to the analysis project (the repo manifest keeps a
+# placeholder so no personal paths are committed).
 
 param(
+    [Parameter(Mandatory = $true)][string]$DumpPath,
+    [string]$ProjectDir = "$env:ProgramData\rextools\proj-ocho-kart",
+    [string]$ReXGlue = "$env:ProgramData\rextools\rexglue.exe",
     [switch]$Force
 )
 
@@ -13,26 +20,26 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifest = Join-Path $repoRoot 'tools\config\ocho_kart_manifest.toml'
-$rexglue  = 'C:\ProgramData\rextools\rexglue.exe'
-$projDir  = 'C:\ProgramData\rextools\proj-ocho-kart'
 
-if (-not (Test-Path -LiteralPath $rexglue)) {
-    throw "rexglue.exe not found at $rexglue (install ReXGlue v0.10.0 prebuilt)"
+if (-not (Test-Path -LiteralPath $ReXGlue)) { throw "rexglue.exe not found: $ReXGlue" }
+if (-not (Test-Path -LiteralPath $manifest)) { throw "manifest not found: $manifest" }
+if (-not (Test-Path -LiteralPath (Join-Path $DumpPath 'default.xex'))) {
+    throw "default.xex not found under: $DumpPath"
 }
-if (-not (Test-Path -LiteralPath $manifest)) {
-    throw "manifest not found: $manifest"
-}
-if (-not (Test-Path -LiteralPath $projDir)) {
-    throw "analysis project not found: $projDir (was created by rexglue init)"
-}
+if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "analysis project not found: $ProjectDir" }
 
-# Keep the analysis project manifest in sync with the repo copy.
-$projManifest = Join-Path $projDir 'ocho_kart_manifest.toml'
-Copy-Item -LiteralPath $manifest -Destination $projManifest -Force
+$dump = ($DumpPath -replace '\\', '/').TrimEnd('/')
+$projManifest = Join-Path $ProjectDir 'ocho_kart_manifest.toml'
 
-$args = @('codegen', $projManifest)
-if ($Force) { $args = @('--force') + $args }
+(Get-Content -LiteralPath $manifest -Raw) `
+    -replace 'REPLACE_WITH_YOUR_DUMP_ROOT', $dump |
+    Set-Content -LiteralPath $projManifest -Encoding UTF8
 
-Write-Output "rexglue $($args -join ' ')"
-& $rexglue @args
+$argv = @('codegen', $projManifest)
+if ($Force) { $argv = @('--force') + $argv }
+
+Write-Output "dump    : $dump"
+Write-Output "manifest: $projManifest"
+Write-Output "rexglue $($argv -join ' ')"
+& $ReXGlue @argv
 exit $LASTEXITCODE

@@ -1,11 +1,9 @@
-﻿# Fase 1 - recompilacion estatica de El Chavo Kart (default.xex) v0.10.0
-# ReXGlue codegen config. Path must point at the user's own legal dump.
-#
-# NOTE (2026-10-02): previous path pointed at a non-existent Dumps/... location.
-# Corrected to the verified dump path used by the analysis project.
+﻿# ReXGlue codegen config (single-file form).
+# Set file_path to your own legal dump, or use tools/run-codegen.ps1.
+
 [rexglue]
 log_level = "info"
 log_file = "generated/reflucode.log"
 
 [rexglue.codegen]
-file_path = "C:/Users/israe/OneDrive/Documentos/REPOS/Proyecto_descompilacion/EL CHAVO KART/default.xex"
+file_path = "REPLACE_WITH_YOUR_DUMP_ROOT/default.xex"

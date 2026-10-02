@@ -1,28 +1,28 @@
 # ReXGlue v0.10.0 codegen manifest - Ocho Kart Recomp
 #
-# v0.10.0 layout (src/codegen/manifest.cpp + config.cpp):
+# Layout expected by v0.10.0 (src/codegen/manifest.cpp + config.cpp):
 #   [project]            required: name, optional sdk_version, game_root
-#   [entrypoint]         required: file_path, out_directory_path, and ANY
-#                        RecompilerConfig fields including [entrypoint.functions]
-#   [[modules]]          optional DLL modules
+#   [entrypoint]         required: file_path, out_directory_path
+#   [entrypoint.functions]  manual function boundaries (see below)
 #
-# CRITICAL: [functions] MUST be nested as [entrypoint.functions].
-# A top-level [functions] is a sibling table and is NEVER seen by
-# RecompilerConfig::LoadFromTable (which is called on the entrypoint table only).
+# BEFORE RUNNING: set game_root and file_path to your own legal dump.
+#   run-codegen.ps1 -DumpPath "C:/path/to/your/EL CHAVO KART"  overrides them.
 #
-# Reclassified call targets: vtable thunks / stubs in .text, not kernel imports.
-# Real imports: IAT 0x82000600-0x82000ACC, signed 307/307 in
-# docs/toolchain/xex-imports-signed.md.
+# v0.10.0 ignores a top-level [functions] table; it must be [entrypoint.functions].
 
 [project]
 name = "ocho_kart"
 sdk_version = "0.10.0"
-game_root = "C:/Users/israe/OneDrive/Documentos/REPOS/Proyecto_descompilacion/EL CHAVO KART"
+game_root = "REPLACE_WITH_YOUR_DUMP_ROOT"
 
 [entrypoint]
-file_path = "C:/Users/israe/OneDrive/Documentos/REPOS/Proyecto_descompilacion/EL CHAVO KART/default.xex"
+file_path = "REPLACE_WITH_YOUR_DUMP_ROOT/default.xex"
 out_directory_path = "generated"
 includes = []
+
+# Non-import call targets seen by ReXGlue (vtable thunks / stubs in .text).
+# Real imports (307, IAT 0x82000600-0x82000ACC) are resolved by the ExportResolver,
+# not here. Full table: docs/toolchain/xex-imports-signed.md.
 
 # vtable thunks: lwz r11,0(r3); lwz r11,off(r11); mtctr r11; bctr  (16 B)
 [entrypoint.functions]
@@ -45,7 +45,7 @@ includes = []
 0x82FBFCB8 = { name = "frag_82FBFCB8_loop", size = 24 }
 0x82FBFDA8 = { name = "frag_82FBFDA8_stores", size = 12 }
 
-# branch-stub / jump-table style targets (b instruction + pad, seen in run 004)
+# branch-stub targets (b instruction + pad)
 0x82B90068 = { name = "branch_stub_82B90068", size = 8 }
 0x82E514C8 = { name = "branch_stub_82E514C8", size = 8 }
 
