@@ -16,6 +16,15 @@ Updated 2026-10-03.
 | 6 renderer | in progress (Xenos GPU plugin renders the intro) |
 | 7 input / audio / stability | in progress — input stabilized, audio silent, cinematics blocked on Bink decoder, stutter is PSO compile |
 
+## Audio: guest delivers silence (2026-10-03)
+
+Measured with a temporary RMS/peak log in `SDLAudioDriver::SubmitFrame`. The guest does call
+`XAudioSubmitRenderDriverFrame` and `SubmitFrame` (queue fills to ~8), and the SDL endpoint opens
+at 2ch/48kHz, but every submitted frame has `peak=0.0 rms=0.0`. So the mute is upstream: the buffer
+the guest hands to the callback is all zeros. The XMA `0601` write is a lock register already
+ignored on purpose (`xma_decoder.cpp`), not the cause. Next: check whether XMA decode produces
+zeros, or the guest never fills the buffer (XMP playlist path for menu music vs XMA for races).
+
 ## Open issue: launcher closes with no input (2026-10-03)
 
 Reported twice: the launcher window closes on its own while the user is away from the machine.

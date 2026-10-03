@@ -11,7 +11,10 @@
 
 #include <rex/rex_app.h>
 #include <rex/cvar.h>
+#include <rex/platform/env.h>
 #include <rex/ui/imgui_dialog.h>
+
+#include <cstring>
 
 #include <cstdint>
 #include <cstdlib>
@@ -387,9 +390,23 @@ class OchoKartApp : public rex::ReXApp {
       const rex::PathConfig& defaults,
       std::function<void(rex::PathConfig)> resume) override {
     // launcher_skip: boot straight into the game, no dialog. Useful for
-    // headless runs and for testing without UI interaction.
+    // headless runs and for testing without UI interaction. The cvar is
+    // registered too late for this hook, so read the environment directly.
     if (rex::cvar::GetFlagByName("launcher_skip") == "true") {
       return defaults;
+    }
+    if (auto env = rex::platform::env::get("REX_LAUNCHER_SKIP"); env && *env == "true") {
+      return defaults;
+    }
+    if (auto env = rex::platform::env::get("OCHO_KART_SKIP_LAUNCHER");
+        env && (*env == "1" || *env == "true")) {
+      return defaults;
+    }
+    {
+      const char* v = std::getenv("REX_LAUNCHER_SKIP");
+      if (v && (std::strcmp(v, "1") == 0 || std::strcmp(v, "true") == 0)) {
+        return defaults;
+      }
     }
 
     launcher_load_from_cvars();
