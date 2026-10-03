@@ -62,18 +62,30 @@ ThreadStartRoutine -> XHostThread::Execute -> XThread::Execute
 `GetState`, `SetState`, `GetCapabilities` and `GetKeystroke` each call `RefreshDevices()`
 (`src/input/input_system.cpp:194,221,260,302`), which mutates the shared
 `devices_`/`device_owners_` vectors with **no lock** (`:81`). These entry points run on guest
-threads, so a concurrent call would race on those vectors and the allocator.
+threads, so concurrent calls race on those vectors and the allocator.
 
-**Unconfirmed.** In the runs we could observe, `XamInputGetState` was called from a *single* host
-thread (trace logging, `xam_input.cpp:99`): a 20s run had 5 calls from one thread, and a 120s run
-made zero input calls. So the missing lock is a real latent defect, but we have **not** shown it
-is what corrupts the `DeviceInfo`. Both the AV and the `0xC0000374` are host-heap corruption; the
-actual corruptor is still unidentified. Likely upstream SDK, not game code.
+**Confirmed (page heap, 2026-10-03).** With full page heap (`cdb` + `!gflag +hpa`) the heap itself
+traps the corruption:
+
+```
+HEAP[ocho_kart.exe]: Invalid address specified to RtlFreeHeap( ..., 00000268F3948C50 )
+std::_Destroy_range<allocator<DeviceInfo>>+0x25
+ -> InputSystem::RefreshDevices+0x641
+ -> InputSystem::SetState+0xfd
+ -> XamInputSetState_entry -> _imp__XamInputSetState
+ -> ocho_kart!sub_830D9E08   (guest)
+ -> XThread::Execute -> XHostThread::Execute
+```
+
+Note the entry point here is `XamInputSetState` (rumble), a *different* XInput entry than the
+`XamInputGetState` AV above — both funnel into the unlocked `RefreshDevices()`. Earlier trace
+samples only saw single-threaded `GetState`, which is why the race looked unconfirmed; the
+`SetState` path is the one that traps it. Upstream SDK bug in `rex::input::InputSystem`.
 
 ## Next
 
-1. The AV/`0xC0000374` are host-heap corruption with an unidentified corruptor. Best tool: build `rexruntimerd` with AddressSanitizer (source is vendored under `external/rexglue-sdk`) and reproduce, or enable full page heap. Neither is set up yet; `gflags`/`appverif` are not installed.
-2. `RefreshDevices` has no lock and is a genuine latent defect; patch it as a defensive fix, but do not expect it to explain the crash without confirmation.
+1. Fix `rex::input::InputSystem`: guard `devices_`/`device_owners_` (and `RefreshDevices`) with a mutex, or make `RefreshDevices` idempotent/skip when nothing changed. Rebuild `rexruntimerd` from `external/rexglue-sdk` and re-run with page heap to confirm the trap is gone.
+2. Report upstream to `rexglue-sdk` with both stacks (`GetState` AV and `SetState` heap trap).
 3. Investigate the `0xC0000005` in the GPU plugin (run-race3) separately.
 4. Map the movie/splash asset paths so the cinematics and post-intro screens load.
 5. Phase 2 (UModel catalog) in parallel.
