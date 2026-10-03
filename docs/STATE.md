@@ -69,9 +69,15 @@ Reopen if it returns.
 **Phase 2 started.** Package inventory of the 320 cooked `.xxx` by name and size is written to
 `docs/reversing-notes.md` (no contents). Highlights: 12 playable characters (KartPawn, each with
 `Arch`/`SP0` variants), per-track `Pista<X>_Arte/_Acc` plus `CO/CT/EN` circuit packages, challenge
-packages, menu packages, and 4 localization packages. Class-level catalog is blocked on UE
-Explorer, whose winget install needs elevation (out of scope). A big-endian header parser was
-attempted but did not decode the name table reliably for this cooked build.
+packages, menu packages, and 4 localization packages. Class-level catalog attempt: UE Explorer's MSI was extracted without admin via `msiexec /a`
+(elevation-free), giving `Eliot.UELib.dll`. A .NET reader was built against `UELib` and calls
+`UnrealPackage.DeserializePackage`; some packages read (one showed 89 names / 35 exports / 31
+imports, package version 860, big-endian), but results are not stable run to run and many packages
+throw `EndOfStream`. The cooked packages are LZO-compressed (`CompressionFlags:4`), and UELib needs
+the compressing-version / decompressor configured for Xbox cooked data, which was not done. So a
+reliable class list is still pending. Next step: either run the UE Explorer GUI with the right Xbox
+settings, or prepare UModel (portable, no admin) which handles cooked packages. UELib and the reader
+live outside the repo (temp); no package contents were written anywhere.
 
 ## Audio diagnosis (read-only, 2026-10-03)
 
