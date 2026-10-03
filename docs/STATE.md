@@ -50,6 +50,24 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio reversing: full chain, contexts never initialized (2026-10-03, chapter 3)
+
+Read-register logging shows the guest reads `0x7FEA1800` (reg `0x600` = ContextArrayAddress): it
+does look up the context array base the shim publishes. Write logging shows it then writes only
+`0x7FEA1804` (0x02000000) and never a lock/kick register.
+
+Chain (all verified):
+1. The title does not use the XMA API (`XMACreateContext`/`XMAInitializeContext`: 0 calls).
+2. The shim allocates the 320-context array and publishes its physical address at reg 0x600.
+3. The guest reads 0x600 (confirmed), so it finds the array.
+4. But the contexts in it were never initialized (the bit 0x4 the driver tests is absent), because
+   nothing ran the init the API would do.
+5. The driver loops, sees no ready context, exits without kicking; Decode never runs; audio is zero.
+
+So the block is context initialization, not mapping. Next step (reading): check whether the title
+calls `XMACreateContext`/`XMAInitializeContext` through a mis-mapped import, or expects contexts
+from another path the shim does not drive. Instrumentation reverted.
+
 ## Audio reversing: the 0x1FF address was my arithmetic error (2026-10-03, chapter 2)
 
 Corrected the previous claim. The guest's store at `sub_82B8B448` does
