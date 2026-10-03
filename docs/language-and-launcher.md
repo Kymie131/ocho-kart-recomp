@@ -55,3 +55,26 @@ Multiple backends already exist in the runtime (`sdl`, `xinput`, plus a keyboard
 driver and a NOP stand-in), selected by the `input_backend` cvar. A launcher device
 selector should expose that cvar and let the SDL driver handle the wide hardware range,
 rather than adding per-device code.
+
+## Launcher implementation
+
+The pre-boot launcher lives in `src/launcher/ocho_kart_app.h` and is deployed into the
+analysis project by `tools/install-launcher.ps1`. It overrides
+`rex::ReXApp::OnFinalizePaths`, returns `std::nullopt` to pause startup, and shows an
+ImGui dialog (language, controller icons, game folder, Play/Quit). Play applies
+`user_language` and `launcher_button_icons`, saves the config, and calls the resume
+callback with the chosen `game_data_root`, which lets the XEX load.
+
+Notes:
+
+- `OnFinalizePaths` is the runtime's documented async wizard hook; the event loop keeps
+  drawing while it is paused, so no thread needs to block.
+- Codegen writes `src/<name>_app.h` once (`RegeneratePolicy::FirstInitOnly`) and then
+  preserves it, so the file here is the source of truth and the script re-deploys it.
+- Options persist through `rex::cvar::SaveConfig` / `LoadConfig` at the path in
+  `PathConfig::config_path` (next to the exe).
+- Verified live: the dialog appears, the game waits for Play, Play boots the XEX, Quit
+  exits, and the chosen language changes the in-game text.
+- Still to do: drawing custom Xbox/PlayStation/Nintendo glyphs. The game's own prompts
+  are baked into its assets, so those glyphs must come from launcher-side UI, not a
+  runtime setting.
