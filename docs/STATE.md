@@ -50,6 +50,25 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio reversing: the 0x1FF address was my arithmetic error (2026-10-03, chapter 2)
+
+Corrected the previous claim. The guest's store at `sub_82B8B448` does
+`rlwinm r10,r7,2,0,29` before `stwbrx`, so the effective address is `r7 << 2`, not `r7`. With the
+base case that is `0x1FFA8690 << 2 = 0x7FEA1A40`, i.e. register **0x690 = Context0Lock**, inside
+the `0x7FEA0000` MMIO range the shim maps. So the "unmapped 0x1FF region" hypothesis was wrong;
+it was a missing `<<2` in my earlier reading.
+
+Measured again with a log of every distinct (addr, group) MMIO write: the shim still receives only
+`0x7FEA1804` (reg 0x601 = 0x02000000), and **no** lock/kick/clear register (0x650/0x690/0x6A0) is
+ever written. Combined with the loop logic (first context without bit `0x4` jumps to the loop end),
+the guest's XMA software driver finds no prepared contexts and exits without kicking anything.
+
+Root cause now: the title never calls `XMACreateContext`/`XMAInitializeContext` (measured 0 calls),
+so no XMA contexts exist for its software driver to process. The missing link is how/where the
+title is supposed to register contexts that the shim does not populate. Next step is to find where
+the title sets up contexts by another path (kernel memory), which is still reading, not a fix.
+Instrumentation reverted.
+
 ## Audio reversing: root cause confirmed (2026-10-03)
 
 Instrumented the XMA MMIO write thunk to log every distinct raw address. Over a run, the shim
