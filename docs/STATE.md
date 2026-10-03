@@ -14,7 +14,31 @@ Updated 2026-10-03.
 | 4 shaders | partially working (101 shaders translated, 87 pipelines — `run-race4.log` 2026-10-03 07:59) |
 | 5 kernel shims / boot | **done — runs stable past the intro with GPU** |
 | 6 renderer | in progress (Xenos GPU plugin renders the intro) |
-| 7 input / audio / stability | in progress — input OK, audio silent, race-start crash (see taxonomy) |
+| 7 input / audio / stability | in progress — input stabilized, audio silent, cinematics blocked on Bink decoder, stutter is PSO compile |
+
+## Findings 2026-10-03 (later): input, stutter, cinematics
+
+**Input heap corruption: fixed and confirmed.** The stack was `XamInputGetState`/`XamInputSetState`
+into `rex::input::InputSystem::RefreshDevices`, which rebuilds `devices_`/`device_owners_` with no
+lock while guest threads can call it concurrently. Full page heap trapped it; the fix serializes
+the access. Patch in `docs/toolchain/rexglue-input-refreshdevices-lock.patch`, runtime rebuilt and
+deployed. The vendored `external/rexglue-sdk` keeps the change uncommitted for an upstream PR.
+
+**Stutter is not the clock.** Measured the xenos vblank worker with a temporary log: both with and
+without `clock_no_scaling`, it marks exactly 60.0 vblanks/s with about 3 ms worst tick stall. The
+clock is not the cause. The real cost is D3D12 PSO creation when a new VS/PS pair first appears
+(`Creating graphics pipeline` in the logs), which shows up as hitches when a track loads. The
+runtime does not persist a pipeline cache: `CommandProcessor::InitializeShaderStorage` is an empty
+body (`src/graphics/command_processor.cpp`). Caching that set to disk is the fix, and it is an
+upstream change, not a local one.
+
+**Cinematics are blocked on naming and a decoder, not path mapping.** The title asks for
+`D:\ChavoKartGame\Movies\INTRO.xxx`, `LOGO_*.xxx` and `*_ESM.bik`, but the dump ships raw
+`INTRO.BIK`, `LOGO_*.BIK`, `DISCLAIMER01.BIK` with no `.xxx` container and no `.txt` descriptor.
+VFS resolution is case-insensitive (`entry.cpp`), and `D:` maps correctly, so the failure is the
+missing `.xxx`/`.txt`, not casing. Even if renamed, these are Bink video and the runtime has no
+Bink decoder, so the picture would still be missing. This needs the UE3 packaging (Phase 2) and a
+Bink decoder, not a path alias.
 
 ## Milestone: stable boot with GPU (2026-10-03)
 
