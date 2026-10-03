@@ -9,7 +9,7 @@ Updated 2026-10-03.
 | 0 bootstrap | done |
 | 0.5 dump audit | done |
 | 1 xex analysis | done |
-| 2 UE3 catalog | not started |
+| 2 UE3 catalog | started — package inventory by name done (320 `.xxx`), class-level catalog pending admin tool |
 | 3 compile recomp C++ | done |
 | 4 shaders | partially working (101 shaders translated, 87 pipelines — `run-race4.log` 2026-10-03 07:59) |
 | 5 kernel shims / boot | **done — runs stable past the intro with GPU** |
@@ -58,6 +58,20 @@ at 2ch/48kHz, but every submitted frame has `peak=0.0 rms=0.0`. So the mute is u
 the guest hands to the callback is all zeros. The XMA `0601` write is a lock register already
 ignored on purpose (`xma_decoder.cpp`), not the cause. Next: check whether XMA decode produces
 zeros, or the guest never fills the buffer (XMP playlist path for menu music vs XMA for races).
+
+## Phase 2 kickoff and GPU AV recheck (2026-10-03)
+
+**GPU plugin AV not reproduced.** Four runs with the current locally built plugin
+(`REX_LAUNCHER_SKIP=true`), 90s each: all alive, no exit, no crash in the Windows Error Reporting
+log. Closed as not reproduced on the current build; possibly resolved by rebuilding the plugin.
+Reopen if it returns.
+
+**Phase 2 started.** Package inventory of the 320 cooked `.xxx` by name and size is written to
+`docs/reversing-notes.md` (no contents). Highlights: 12 playable characters (KartPawn, each with
+`Arch`/`SP0` variants), per-track `Pista<X>_Arte/_Acc` plus `CO/CT/EN` circuit packages, challenge
+packages, menu packages, and 4 localization packages. Class-level catalog is blocked on UE
+Explorer, whose winget install needs elevation (out of scope). A big-endian header parser was
+attempted but did not decode the name table reliably for this cooked build.
 
 ## Audio diagnosis (read-only, 2026-10-03)
 
@@ -199,13 +213,13 @@ Still open:
    deliberate session of its own.
 2. Launcher closes with no input while the machine is unattended (not reproduced in a 4-minute idle
    run). See "Open issue" above. Suspected external window close request.
-3. `0xC0000005` seen once in the GPU plugin. Analyzed with cdb on dump `ocho_kart.exe.36364.dmp`:
-   `INVALID_POINTER_READ` at `rexgpu-xenosrd.dll+0x1d281` (module timestamp `0x6a88d2d8` =
-   2026-08-21, the prebuilt SDK plugin). The stack is all inside the plugin (symbolized only as
-   `rex_gpu_create+offset` because there is no PDB for the prebuilt). The local build has its own
-   `rexgpu-xenosrd.pdb` but it does not match the prebuilt that crashed, so a precise function
-   could not be recovered. Next step: reproduce on the current locally built plugin; if it recurs,
-   symbolizer now has the matching PDB.
+3. `0xC0000005` seen once in the GPU plugin. **Checked on the current build: not reproduced.**
+   Original: dump `ocho_kart.exe.36364.dmp`, `INVALID_POINTER_READ` at `rexgpu-xenosrd.dll+0x1d281`
+   (module timestamp `0x6a88d2d8` = 2026-08-21, the prebuilt SDK plugin; no matching PDB).
+   On the current locally built plugin (own `rexgpu-xenosrd.pdb`), four runs with
+   `REX_LAUNCHER_SKIP=true` each survived 90s alive with no exit and no crash in the Windows Error
+   Reporting log. Closed as not reproduced on the current build; possibly fixed by the plugin
+   rebuild. Reopen if it reappears.
 4. Cinematics: title asks for `.xxx`/`.txt` movie containers, the dump ships raw `.BIK`, and the
    runtime has no Bink decoder. Needs UE3 packaging plus a decoder, not just path mapping.
 5. Phase 2 (UModel catalog) in parallel.

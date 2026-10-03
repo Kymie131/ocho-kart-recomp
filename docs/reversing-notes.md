@@ -60,8 +60,54 @@ v0.10.0 reads `[functions]` **only inside `[entrypoint]`** (`manifest.cpp` → `
 
 Codegen run (debug, `--force`): imports resolve as `__imp__<Name>` (`__imp__NtWriteFile`, …). Output written outside the repo (`%ProgramData%\rextools\proj-ocho-kart\generated\`, ~276 MB). Analyzer completed; `frag_82FBFCB8_loop` still pending seal (beq to 0x82FBFC9C outside its 24 B window).
 
+## Phase 2 — UE3 asset catalog (started 2026-10-03)
+
+Inventory is by package name and size only. No package contents, class bytecode, textures or
+models are stored here or anywhere in the repo.
+
+Package organization in `ChavoKartGame\CookedXbox360\` (320 `.xxx`):
+
+| Group | Count | What it is |
+|---|---|---|
+| `KartPawn<Name>Arch_SF` / `KartPawn<Name>SP0_SF` | 24 | Playable karts. 12 characters, each with an `Arch` variant and an `SP0` variant. |
+| `Pista<X>_Arte` / `_Arte_1` | 23 | Track art packages (visuals), some split in two parts. |
+| `Pista<X>_Acc` | 20 | Track accessory/decoration packages. |
+| `CO-<X>_Circuito*` | 20 | Per-track `CO` packages (circuito). |
+| `CT-<X>_Circuito*` | 20 | Per-track `CT` packages. |
+| `EN-<X>_Circuito*` | 20 | Per-track `EN` packages. |
+| `RET-*` / challenge packages | 37 | Challenges/minigames. |
+| `TitleMap`, `StartMenu` | 1 each | Menu/map packages. |
+| `ChavoKartGame_LOC_{ESM,ESN,INT,PTB}` | 4 | Localization tables. |
+| `ChavoKartEntry`, `ChavoKartGame` | 2 | Title entry and main game package. |
+| Other engine/support packages | rest | Core/Engine/GFxUI/GameFramework/FMODAudio and misc. |
+
+The 12 playable characters, from the `KartPawn*` package names:
+Chavo, Quico, Cleotilde, Don Ramon, Florinda, Godinez, Nono, Paty, Popis, ProfJirafales, Rufino,
+SrBarriga. Each has `Arch` and `SP0` variants (likely a "stat/arch" default and a "SP0" gameplay
+variant), suggesting the karts are data-driven per character.
+
+Track naming: `<Prefix>-Pista<Name>_Circuito<N>` and `Pista<Name>_Arte/Acc`, e.g. `PistaElEspacio`,
+`PistaCiudad`, `PistaBrasilM`, `PistaBrasilC`, `PistaAcapulco`, `PistaMuseo`, `PistaTanga`,
+`PistaLaFeria`. So each track has art, accessories, and up to two circuit variants.
+
+### Blocker: GUI tooling needs admin
+
+UE Explorer is available in winget (`Eliot.UEExplorer`, 1.3.1) and the installer was downloaded, but
+`winget install` hung on `msiexec` waiting for elevation, which is out of scope without approval. A
+big-endian UE3 header parser was attempted for a read-only catalog but did not decode the name
+table reliably; the header field order for this cooked build is not confirmed. Next step for a
+proper catalog: run UModel/UE Explorer with user-provided install, then read class names from the
+package exports. The name/size inventory above stands on its own regardless.
+
+### Relation to the binary side
+
+Not yet mapped. The runtime work so far is kernel/input/render. The gameplay classes (menu, race
+start, power-ups) live in these packages and would be read for reference only; UnrealScript
+bytecode is never extracted into the repo.
+
 ## Open
 
-- Phase 3 compile: need MSVC headers locally, or build via GitHub Actions only.
-- Phase 2: catalog 320 `.xxx` with UModel — gameplay map, not committed.
-- Re-run codegen Write after fixing the frag if a full partition set is required.
+- Phase 3 compile: done (compiles, links, boots).
+- Phase 2: package inventory done by name; class-level catalog pending a GUI tool (admin blocker).
+- Audio: XMA delivers zero frames, XMP has no playback path (see STATE.md).
+- Cinematics: need UE3 `.xxx`/`.txt` packaging and a Bink decoder.
