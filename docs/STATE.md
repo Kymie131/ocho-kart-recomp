@@ -62,14 +62,18 @@ ThreadStartRoutine -> XHostThread::Execute -> XThread::Execute
 `GetState`, `SetState`, `GetCapabilities` and `GetKeystroke` each call `RefreshDevices()`
 (`src/input/input_system.cpp:194,221,260,302`), which mutates the shared
 `devices_`/`device_owners_` vectors with **no lock** (`:81`). These entry points run on guest
-threads. Concurrent calls race on those vectors and the allocator -> corrupt `DeviceInfo`/heap.
-This is the most likely single root cause behind **both** this AV and the `0xC0000374`, and it
-is an **upstream SDK bug**, not game code.
+threads, so a concurrent call would race on those vectors and the allocator.
+
+**Unconfirmed.** In the runs we could observe, `XamInputGetState` was called from a *single* host
+thread (trace logging, `xam_input.cpp:99`): a 20s run had 5 calls from one thread, and a 120s run
+made zero input calls. So the missing lock is a real latent defect, but we have **not** shown it
+is what corrupts the `DeviceInfo`. Both the AV and the `0xC0000374` are host-heap corruption; the
+actual corruptor is still unidentified. Likely upstream SDK, not game code.
 
 ## Next
 
-1. Confirm the race: check whether the guest calls `XamInputGetState`/`XamSetState`/`XamInputGetKeystroke` from more than one thread (log thread ids), or instrument `RefreshDevices`.
-2. Patch `rex::input::InputSystem` to serialize `RefreshDevices()` (mutex around `devices_`/`device_owners_`), rebuild the SDK runtime, re-run. Likely fixes both this AV and the `0xC0000374`.
+1. The AV/`0xC0000374` are host-heap corruption with an unidentified corruptor. Best tool: build `rexruntimerd` with AddressSanitizer (source is vendored under `external/rexglue-sdk`) and reproduce, or enable full page heap. Neither is set up yet; `gflags`/`appverif` are not installed.
+2. `RefreshDevices` has no lock and is a genuine latent defect; patch it as a defensive fix, but do not expect it to explain the crash without confirmation.
 3. Investigate the `0xC0000005` in the GPU plugin (run-race3) separately.
 4. Map the movie/splash asset paths so the cinematics and post-intro screens load.
 5. Phase 2 (UModel catalog) in parallel.
