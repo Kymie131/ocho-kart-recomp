@@ -222,7 +222,61 @@ inline void launcher_draw_button_preview(int style, float size) {
                 IM_COL32(255, 255, 255, 255), s.label);
   }
 
-  ImGui::Dummy(ImVec2(gap * 2 + shoulder_w, gap * 2 + size * 0.4f + shoulder_h * 2.3f));
+  // Stick clicks (L3/R3), a d-pad, and the system buttons below the shoulders.
+  const float sys_y = shoulder_y + shoulder_h * 2.2f;
+  const ImU32 body = IM_COL32(0x45, 0x45, 0x45, 255);
+
+  auto draw_pill = [&](float x, float y, float w, const char* label) {
+    dl->AddRectFilled(ImVec2(x, y), ImVec2(x + w, y + shoulder_h), body, 3.0f);
+    const ImVec2 ts = ImGui::CalcTextSize(label);
+    dl->AddText(ImVec2(x + (w - ts.x) * 0.5f, y + (shoulder_h - ts.y) * 0.5f),
+                IM_COL32(255, 255, 255, 255), label);
+  };
+
+  // Stick clicks.
+  draw_pill(origin.x, sys_y, size * 0.9f, "L3");
+  draw_pill(origin.x + gap * 2, sys_y, size * 0.9f, "R3");
+
+  // D-pad (cross of four squares) in the middle.
+  const float dpad_cx = origin.x + gap + r * 0.5f;
+  const float dpad_cy = sys_y + shoulder_h * 0.5f;
+  const float q = size * 0.42f;
+  const float t = size * 0.32f;
+  dl->AddRectFilled(ImVec2(dpad_cx - t * 0.5f, dpad_cy - t * 1.5f),
+                    ImVec2(dpad_cx + t * 0.5f, dpad_cy - t * 0.5f), q ? body : body, 2.0f);
+  dl->AddRectFilled(ImVec2(dpad_cx - t * 0.5f, dpad_cy + t * 0.5f),
+                    ImVec2(dpad_cx + t * 0.5f, dpad_cy + t * 1.5f), body, 2.0f);
+  dl->AddRectFilled(ImVec2(dpad_cx - t * 1.5f, dpad_cy - t * 0.5f),
+                    ImVec2(dpad_cx - t * 0.5f, dpad_cy + t * 0.5f), body, 2.0f);
+  dl->AddRectFilled(ImVec2(dpad_cx + t * 0.5f, dpad_cy - t * 0.5f),
+                    ImVec2(dpad_cx + t * 1.5f, dpad_cy + t * 0.5f), body, 2.0f);
+  (void)q;
+
+  // System buttons: View/Menu/Guide (Xbox), Share/Options/PS (PS), -/+/Home (Nintendo).
+  const char* sys1;
+  const char* sys2;
+  const char* sys3;
+  if (style == 2) {
+    sys1 = "Share";
+    sys2 = "Options";
+    sys3 = "PS";
+  } else if (style == 3) {
+    sys1 = "-";
+    sys2 = "+";
+    sys3 = "Home";
+  } else {
+    sys1 = "View";
+    sys2 = "Menu";
+    sys3 = "Guide";
+  }
+  const float sys_row_y = sys_y + shoulder_h * 1.4f;
+  const float sys_w = size * 1.1f;
+  draw_pill(origin.x, sys_row_y, sys_w, sys1);
+  draw_pill(origin.x + gap * 2, sys_row_y, sys_w, sys2);
+  draw_pill(origin.x + gap * 0.9f, sys_row_y, sys_w, sys3);
+
+  ImGui::Dummy(ImVec2(gap * 2 + shoulder_w,
+                      gap * 2 + size * 0.4f + shoulder_h * 2.3f + shoulder_h * 2.0f));
 }
 
 }  // namespace
