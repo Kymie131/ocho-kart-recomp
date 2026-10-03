@@ -295,11 +295,15 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
     auto& st = launcher_state();
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowSize(ImVec2(460, 0), ImGuiCond_Always);
-    if (ImGui::Begin("El Chavo Kart - Launcher", nullptr,
-                     ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
-                         ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+    const bool visible = ImGui::Begin("El Chavo Kart - Launcher", nullptr,
+                                      ImGuiWindowFlags_NoCollapse |
+                                          ImGuiWindowFlags_AlwaysAutoResize);
+    if (!visible) {
+      ImGui::End();
+      return;
+    }
+    {
       ImGui::TextUnformatted("Choose your options, then press Play.");
       ImGui::Separator();
 
