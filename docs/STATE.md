@@ -95,6 +95,21 @@ to XA/streaming for menu audio.
 
 Neither shim was implemented in this session, per instruction to document only.
 
+## Launcher auto-close: defensive veto added (2026-10-03)
+
+Symptom: the launcher closed on its own while the machine was unattended. Root path is
+`SDL_EVENT_WINDOW_CLOSE_REQUESTED` -> `Window::SendCloseRequestToListeners` -> if no listener
+vetoes, `ReXApp::OnClosing` -> `std::_Exit(0)`. `OnWindowCloseRequested` defaulted to true, so
+nothing refused an external close.
+
+Could not reproduce in a 180s idle run (process stayed alive, no close request logged). Since the
+symptom is real to the user but not reproducible headlessly, a defensive fix was applied instead:
+`OchoKartApp::OnWindowCloseRequested` refuses the close while the launcher is still waiting
+(`resume_` set), and the Quit button now goes through `ReportClose()` which clears `resume_` first
+so it still closes. Verified: launcher stayed alive 40s with the veto active and the gate intact,
+and the `launcher_skip` path still boots to the game. A stray `WM_CLOSE` (focus/session) can no
+longer dismiss the menu. Reopen if it still closes while waiting.
+
 ## Open issue: launcher closes with no input (2026-10-03)
 
 Reported twice: the launcher window closes on its own while the user is away from the machine.

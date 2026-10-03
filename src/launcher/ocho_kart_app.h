@@ -441,13 +441,28 @@ class OchoKartApp : public rex::ReXApp {
             resume(paths);
           }
         },
-        [this]() {
-          if (window()) {
-            window()->RequestClose();
-          }
-        });
+        [this]() { ReportClose(); });
 
     return std::nullopt;
+  }
+
+  // While the launcher is waiting (resume_ still set, no Play/Quit yet), refuse
+  // an external close request so a stray WM_CLOSE (focus change, session
+  // quirk) cannot dismiss the menu. The Quit button goes through ReportClose,
+  // which clears resume_ first, so it still closes.
+  bool OnWindowCloseRequested() override {
+    if (resume_) {
+      return false;
+    }
+    return true;
+  }
+
+  // Quit path: clear the pending resume so the close request is allowed.
+  void ReportClose() {
+    resume_ = nullptr;
+    if (window()) {
+      window()->RequestClose();
+    }
   }
 
  private:
