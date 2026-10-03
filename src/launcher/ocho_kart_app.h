@@ -386,6 +386,12 @@ class OchoKartApp : public rex::ReXApp {
   std::optional<rex::PathConfig> OnFinalizePaths(
       const rex::PathConfig& defaults,
       std::function<void(rex::PathConfig)> resume) override {
+    // launcher_skip: boot straight into the game, no dialog. Useful for
+    // headless runs and for testing without UI interaction.
+    if (rex::cvar::GetFlagByName("launcher_skip") == "true") {
+      return defaults;
+    }
+
     launcher_load_from_cvars();
     auto& st = launcher_state();
     if (st.dump[0] == '\0') {

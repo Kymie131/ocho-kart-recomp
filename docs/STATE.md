@@ -16,6 +16,14 @@ Updated 2026-10-03.
 | 6 renderer | in progress (Xenos GPU plugin renders the intro) |
 | 7 input / audio / stability | in progress — input stabilized, audio silent, cinematics blocked on Bink decoder, stutter is PSO compile |
 
+## Open issue: launcher closes with no input (2026-10-03)
+
+Reported twice: the launcher window closes on its own while the user is away from the machine.
+Not reproduced in 4 minutes idle (process stayed alive, XEX never loaded), so it needs a longer
+idle run or focus/session handling. `ReXApp::OnClosing` hard-exits on a window close request
+(`std::_Exit(0)`), so a spurious `SDL_EVENT_WINDOW_CLOSE_REQUESTED` (session lock, remote desktop,
+monitor sleep) would explain it. Investigate `OnWindowCloseRequested` / focus hooks.
+
 ## Findings 2026-10-03 (later): input, stutter, cinematics
 
 **Input heap corruption: fixed and confirmed.** The stack was `XamInputGetState`/`XamInputSetState`
