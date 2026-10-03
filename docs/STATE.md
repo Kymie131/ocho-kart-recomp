@@ -16,6 +16,29 @@ Updated 2026-10-03.
 | 6 renderer | in progress (Xenos GPU plugin renders the intro) |
 | 7 input / audio / stability | in progress — input stabilized, audio silent, cinematics blocked on Bink decoder, stutter is PSO compile |
 
+## InputSystem race fixed with correct lock design (2026-10-03)
+
+The earlier patch only locked inside `RefreshDevices`/`DriverForDevice`/`DeviceInfoFor`, which
+still left a window: `GetState` released the lock between `RefreshDevices()` and the per-device
+`DriverForDevice()` loop, so another guest thread could rebuild `devices_` in between and hand out
+a dangling `DeviceInfo*`.
+
+Reworked to the lock-per-entry-point design: one `std::recursive_mutex` taken once at the start of
+`GetState`, `SetState`, `GetCapabilities`, `GetKeystroke`, `Shutdown` and `SetDeviceAssignment`, and
+held for the whole body. `RefreshDevices`, `DriverForDevice` and `DeviceInfoFor` no longer lock
+(they document that the caller holds it). Recursive so the helpers can be called from an entry
+point already holding the lock without deadlocking. Grep confirms every `devices_`/`device_owners_`
+access is now under that contract.
+
+Evidence (Tarea B):
+- Two consecutive long runs with the rebuilt runtime and `REX_LAUNCHER_SKIP=true`: 150s and 200s
+  alive, no exit, no FATAL, and no `ocho_kart` crash in the Windows Error Reporting log for either
+  window. Before the correct design, a run died at about 71s with `0xC0000005` in
+  `rexruntimerd.dll` (`_Destroy_range<DeviceInfo>`).
+- Result: the `0xC0000005` is gone across both runs. Consistent with one bug (the race) showing as
+  several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
+  heap-corruption event), but it was the same call site family.
+
 ## Audio: guest delivers silence (2026-10-03)
 
 Measured with a temporary RMS/peak log in `SDLAudioDriver::SubmitFrame`. The guest does call
