@@ -16,6 +16,17 @@ Updated 2026-10-03.
 | 6 renderer | in progress (Xenos GPU plugin renders the intro) |
 | 7 input / audio / stability | in progress — input stabilized, audio silent, cinematics blocked on Bink decoder, stutter is PSO compile |
 
+## InputSystem::RefreshDevices race — CLOSED (2026-10-03)
+
+Closed. Upstream issue: https://github.com/rexglue/rexglue-sdk/issues/475 (full diff posted as a
+comment, verified to contain all three files). Local patch of the same diff lives at
+`patches/rexglue-sdk-input-refreshdevices-race.patch`, committed in `4e53749` and pushed.
+
+Housekeeping:
+- `origin/main` = `4e53749` after push, equal to the local HEAD.
+- The vendored submodule `external/rexglue-sdk` stays dirty on purpose; the change is carried by
+  the patch and the issue, not committed inside the submodule.
+
 ## InputSystem race fixed with correct lock design (2026-10-03)
 
 The earlier patch only locked inside `RefreshDevices`/`DriverForDevice`/`DeviceInfoFor`, which
