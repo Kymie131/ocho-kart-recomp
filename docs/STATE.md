@@ -50,6 +50,65 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio reversing: root cause confirmed (2026-10-03)
+
+Instrumented the XMA MMIO write thunk to log every distinct raw address. Over a run, the shim
+receives **exactly one** address: `0x7FEA1804`. It never receives the `0x1FFA8690`-range write the
+guest's XMA software driver uses to kick each context (`sub_82B8B448`).
+
+Root cause: the guest drives XMA itself and writes its per-context kick/status to the `0x1FF...`
+region, which is **not mapped as MMIO** in the shim (only `0x7FEA0000` is). Those writes fall
+through to normal guest memory and do nothing, so `XmaContext::Decode` never runs and every audio
+buffer stays zero. The `0x7FEA1804` start/end transaction writes do reach the shim but are cosmetic.
+
+Fix is now well defined (not guessed): map/handle the `0x1FF...` XMA register view that the guest
+computes, so its per-context enable writes reach the decoder, or determine why the guest targets
+that address (a second MMIO view vs a mapping the shim must replicate). This is the concrete,
+verified next step. Instrumentation reverted.
+
+## Audio reversing: guest has its own XMA software driver (2026-10-03)
+
+Found the writer of `0x7FEA1804` in the recompiled guest:
+`sub_82B8B448` (`ocho_kart_recomp.301.cpp`). It:
+
+1. Enters a critical section (`RtlEnterCriticalSection`).
+2. Writes `0x02000000` to `0x7FEA1804` (start of a work transaction).
+3. Iterates 320 contexts, and for each with bit `0x4` set and `0x20000` clear it updates
+   buffers/offsets and writes a per-context enable bit to a computed register address.
+4. Writes `0x03000000` to `0x7FEA1804` (end of transaction).
+5. Leaves the critical section.
+
+So `0x02`/`0x03` on `0x1804` are a start/end transaction marker, not a command the shim must decode;
+Xenia ignoring it is consistent. The guest drives XMA in software itself.
+
+Important detail: in step 3 the guest writes to `0x1FFA8690`-range addresses
+(`addis r7,r7,8187` then `-31088`), which is **not** inside the `0x7FEA0000` MMIO range the shim
+maps. So either the guest uses a second XMA register view the shim does not map, or those are normal
+guest memory. Deciding which requires one more measurement (does the shim receive writes outside
+`0x7FEA`, or is the kick written to an unmapped register view?).
+
+Candidate fix path, grounded in this code: on the `0x02000000` write to `0x7FEA1804`, the shim
+should drive the XMA context processing (the same work the exports path does) instead of ignoring
+it, since the guest clearly brackets a 320-context processing pass with that value. Verify the
+`0x1FF...` write target first so the fix lands on the right register.
+
+## Audio: the title drives XMA by MMIO, not the XMA exports (2026-10-03)
+
+Key finding from a debug run (music/menu phase): **zero** calls to the XMA kernel exports
+(`XMACreateContext`, `XMAInitializeContext`, `XMAEnableContext`, `XMASetInputBuffer*`,
+`XMASetOutputBuffer*`). The only XMA traffic is **32518 writes to MMIO register `0x0601`** (physical
+`0x1804`), and nothing else. So the title does not use the XMA API this shim implements; it drives
+XMA by writing `0x1804` directly (this maps through `(addr & 0xFFFF) / 4` to `0x601`).
+
+`0x0601`/`0x1804` is listed as `???` in the XMA register table
+(`include/rex/audio/xma/register_table.inc`), and Xenia also ignores it on purpose. No verified
+semantics exist for it here, so it must not be guessed. The XMP path is unrelated: the title never
+calls `XMPCreateTitlePlaylist` either; only `XMPGetPlaybackController`/`XMPSetPlaybackController`.
+
+Next step (reversing, not a shim): read the recompiled guest code that writes `0x1804` to learn the
+handshake (what the `0x02`/`0x03` values mean and what the guest expects to happen), then implement
+that in the XMA MMIO write path. That is the only path this title uses for audio.
+
 ## Audio: what actually blocks it (2026-10-03, concluded)
 
 Two independent gaps, both upstream-scale, no one-line fix:
