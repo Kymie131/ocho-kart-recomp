@@ -1,6 +1,6 @@
 ﻿# State
 
-Updated 2026-10-02.
+Updated 2026-10-03.
 
 ## Where we are
 
@@ -11,34 +11,32 @@ Updated 2026-10-02.
 | 1 xex analysis | done |
 | 2 UE3 catalog | not started |
 | 3 compile recomp C++ | done |
-| 4 shaders | not started |
-| 5 kernel shims / boot | done (runs stable) |
-| 6 renderer | next (no picture yet) |
+| 4 shaders | partially working (3 shaders translated, 2 pipelines) |
+| 5 kernel shims / boot | **done — runs stable past the intro with GPU** |
+| 6 renderer | in progress (Xenos GPU plugin renders the intro) |
 
-## Phase 5 result
+## Milestone: stable boot with GPU (2026-10-03)
 
-The game boots and **runs stably** (60s, no fatal). It loads the XEX, registers the recompiled functions, resolves all 307 signed imports, initializes audio, and walks the intro asset sequence (disclaimer, UE3 logo, game logos).
+`ocho_kart.exe` with `--gpu_plugin xenos` and the dump wired:
 
-No GPU plugin is loaded, so there is no picture yet — that is Phase 6.
+- D3D12 device on the RTX 4050, shader storage initialized, 3 shaders translated, 2 pipelines created.
+- Plays the whole intro asset sequence in real time: disclaimer, UE3/Slang/Televisa/Efecto logos, INTRO cinematic.
+- Runs **>3 minutes with no fatal** (was crashing mid-init before).
+- No `Call to invalid or unregistered function` anymore.
 
-Remaining (non-fatal) warnings: the game probes movie/splash paths (`D:\ChavoKartGame\Movies\*`, `Splash.bmp`) that the VFS does not resolve. Path/device mapping for those assets is pending.
+The window stays open after the intro. There is no movie decoder for the Bink/`.xxx` cinematics and the splash/movie paths (`D:\ChavoKartGame\Movies\*`) still do not resolve in the VFS, so the post-cinematic state is likely blank — needs the asset path mapping.
 
-## How the boot was stabilised
+## How it was stabilised
 
-Runtime crashed repeatedly with `Call to invalid or unregistered function` on functions that codegen cannot discover because they are reached only through pointers/vtables (never via a `bl`). `tools/peel.ps1` reads each crash address from the boot log, sizes it (next registered function start), appends it to `[entrypoint.functions]`, and reruns codegen+build+boot. Added this way:
+Repeated `Call to invalid or unregistered function` came from functions codegen cannot discover (reached only via pointers/vtables, never a `bl`). `tools/peel.ps1` runs codegen+build+boot, reads each crash address from the boot log, sizes it (next registered start), appends to `[entrypoint.functions]`, and repeats. 24 entries peeled so far. Builds are done by `tools/boot-loop.ps1` (codegen + clang/Ninja + run, 90s window).
 
-```
-0x82B3F920 (setter, 8)
-0x82A8E828 (16)
-0x82A62EE8 (16)
-0x82ADB388 (16)
-```
+A bulk scan approach (`gen-ptr-funcs.ps1`) was tried and reverted: false positives broke hundreds of branches. The directed peel is the working method.
 
-Earlier manual entries in the same category are also in the manifest (vtable thunks, getters, veneers).
+## Next
 
-A bulk alternative (`tools/gen-ptr-funcs.ps1`, scan data sections for code pointers) added 479 entries but produced false positives that broke hundreds of branches, so it was reverted. The directed peel is the working method.
-
-Ironically the additions made earlier this session (before the bulk) were kept because they were verified by the runtime reaching past them.
+1. Map the movie/splash asset paths so the cinematics and post-intro screens load.
+2. Keep `tools/peel.ps1` handy — new code paths (menu, gameplay) will hit more undiscovered pointer functions.
+3. Phase 2 (UModel catalog) in parallel.
 
 ## Paths
 
@@ -50,13 +48,7 @@ Ironically the additions made earlier this session (before the bulk) were kept b
 | ReXGlue analyzer | `C:\ProgramData\rextools\rexglue.exe` v0.10.0 |
 | Manifest | `tools/config/ocho_kart_manifest.toml` |
 | Build | `tools/build.ps1` |
-| Codegen+build+run loop | `tools/boot-loop.ps1` |
-| Directed crash peeler | `tools/peel.ps1` |
+| Codegen+build+run | `tools/boot-loop.ps1` |
+| Crash peeler | `tools/peel.ps1` |
+| Launch for viewing | `tools/run-game.ps1` |
 | Signed imports | `docs/toolchain/xex-imports-signed.md` |
-
-## Next
-
-1. Phase 6: load the GPU plugin / native renderer to get a picture. Then see how far the menu is.
-2. Fix the movie/splash path mapping so intro assets load.
-3. Phase 2 (UModel catalog) in parallel.
-4. Keep `tools/peel.ps1` handy — new code paths may hit more undiscovered pointer functions.
