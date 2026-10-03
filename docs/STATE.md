@@ -50,6 +50,23 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: what actually blocks it (2026-10-03, concluded)
+
+Two independent gaps, both upstream-scale, no one-line fix:
+
+1. **XMP (menu music).** The title calls `XMPGetPlaybackController` and
+   `XMPSetPlaybackController`; it never asks the VFS for any `.fsb`/`.xma`/`.wav` for music. The
+   XMP path in `src/kernel/xam/apps/xmp_app.cpp` tracks playlists but has no decoder wired, and
+   `XMPRegisterCodec` is a `REX_EXPORT_STUB`. So menu music has no playback implementation at all.
+2. **XMA (races/effects).** `XmaContext::Consume` never runs, so no PCM is decoded. The guest
+   writes `0x0601` (a register Xenia also ignores on purpose) and the XMA context is never kicked
+   in a way this shim drives. The XMA subsystem (contexts, indexed registers, kick/lock/clear via
+   the XMA exports) needs the full path verified against the title's sequence.
+
+Cross-check against Xenia: the `0601` handling is identical to Xenia upstream, so it is not the
+bug. Fixing audio means implementing XMP playback and validating the XMA kick sequence, which is a
+dedicated audio session, not a shim tweak. Instrumentation reverted; runtime rebuilt clean.
+
 ## Audio: XMA decode never runs (2026-10-03, deeper)
 
 Instrumented `XmaContext::Consume` (temporary peak log). Over a 40s run: `XMA_DIAG` never printed,
