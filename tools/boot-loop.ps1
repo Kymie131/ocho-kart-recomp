@@ -44,7 +44,7 @@ Write-Output "[3/4] build done"
 $exe = Join-Path $bdir "ocho_kart.exe"
 $blog = "$ProjectDir\docs\boot-$Tag.log"
 Remove-Item $blog,"$blog.err","$blog.out" -Force -ErrorAction SilentlyContinue
-$rp = Start-Process -FilePath $exe -ArgumentList @("--game_data_root","`"$DumpPath`"","--log_file","`"$blog`"","--log_level","info") `
+$rp = Start-Process -FilePath $exe -ArgumentList @("--game_data_root","`"$DumpPath`"","--gpu_plugin","xenos","--log_file","`"$blog`"","--log_level","info") `
     -WorkingDirectory $bdir -RedirectStandardOutput "$blog.out" -RedirectStandardError "$blog.err" -NoNewWindow -PassThru
 Start-Sleep -Seconds 30
 $alive = -not $rp.HasExited
