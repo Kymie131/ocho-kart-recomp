@@ -97,3 +97,4 @@ includes = []
 0x82C05838 = { name = "sub_82C05838_peel", size = 24 }
 0x82BFE408 = { name = "sub_82BFE408_peel", size = 24 }
 0x82C368F0 = { name = "sub_82C368F0_peel", size = 32 }
+0x82AA9780 = { name = "sub_82AA9780_peel", size = 8 }
