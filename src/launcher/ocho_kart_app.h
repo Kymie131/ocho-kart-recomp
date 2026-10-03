@@ -98,6 +98,85 @@ inline void launcher_load_from_cvars() {
   }
 }
 
+// Draws the four face buttons for the selected prompt style. Shapes are drawn
+// with the ImGui draw list (no game assets). Style id matches launcher_icons:
+// 0 auto (shows Xbox), 1 xbox, 2 playstation, 3 nintendo.
+inline void launcher_draw_button_preview(int style, float size) {
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  const ImVec2 origin = ImGui::GetCursorScreenPos();
+  const float r = size * 0.5f;
+  const float gap = size * 1.35f;
+  const float cx = origin.x + r;
+  const float cy = origin.y + r;
+  const ImU32 text_col = ImGui::GetColorU32(ImGuiCol_Text);
+
+  struct Face {
+    float x;
+    float y;
+    const char* label;
+    ImU32 color;
+  };
+
+  // Xbox colors: A green, B red, X blue, Y yellow.
+  const ImU32 kGreen = IM_COL32(0x10, 0x7C, 0x10, 255);
+  const ImU32 kRed = IM_COL32(0xC0, 0x30, 0x30, 255);
+  const ImU32 kBlue = IM_COL32(0x20, 0x60, 0xC0, 255);
+  const ImU32 kYellow = IM_COL32(0xC0, 0xA0, 0x10, 255);
+  const ImU32 kGray = IM_COL32(0x60, 0x60, 0x60, 255);
+
+  if (style == 2) {
+    // PlayStation: cross, circle, square, triangle (grayscale).
+    struct Pos {
+      float x;
+      float y;
+      int shape;
+    };
+    const Pos ps[4] = {{0, 0, 0}, {1, 0, 1}, {0, 1, 2}, {1, 1, 3}};
+    for (const auto& p : ps) {
+      const float px = cx + p.x * gap;
+      const float py = cy + p.y * gap;
+      if (p.shape == 0) {
+        dl->AddLine(ImVec2(px - r * 0.6f, py - r * 0.6f),
+                    ImVec2(px + r * 0.6f, py + r * 0.6f), text_col, 2.0f);
+        dl->AddLine(ImVec2(px - r * 0.6f, py + r * 0.6f),
+                    ImVec2(px + r * 0.6f, py - r * 0.6f), text_col, 2.0f);
+      } else if (p.shape == 1) {
+        dl->AddCircle(ImVec2(px, py), r * 0.7f, text_col, 0, 2.0f);
+      } else if (p.shape == 2) {
+        dl->AddRect(ImVec2(px - r * 0.6f, py - r * 0.6f),
+                    ImVec2(px + r * 0.6f, py + r * 0.6f), text_col, 0.0f, 0, 2.0f);
+      } else {
+        dl->AddTriangle(ImVec2(px, py - r * 0.7f), ImVec2(px - r * 0.7f, py + r * 0.6f),
+                        ImVec2(px + r * 0.7f, py + r * 0.6f), text_col, 2.0f);
+      }
+    }
+  } else {
+    // Xbox (style 1) and Nintendo (style 3), always A/B/X/Y. Nintendo swaps the
+    // face positions (B/A on the bottom, Y/X on the top), matching its layout.
+    const bool nint =
+        (style == 3);
+    // Xbox: A bottom, B right, X left, Y top. Nintendo: B bottom, A right,
+    // Y left, X top.
+    const Face faces[4] = {
+        {0, 1, nint ? "B" : "A", nint ? kRed : kGreen},    // bottom
+        {1, 0, nint ? "A" : "B", nint ? kGreen : kRed},    // right
+        {-1, 0, nint ? "Y" : "X", nint ? kYellow : kBlue}, // left
+        {0, -1, nint ? "X" : "Y", nint ? kBlue : kYellow}, // top
+    };
+    for (const auto& f : faces) {
+      const float px = cx + f.x * gap;
+      const float py = cy + f.y * gap;
+      dl->AddCircleFilled(ImVec2(px, py), r, f.color, 0);
+      const ImVec2 ts = ImGui::CalcTextSize(f.label);
+      dl->AddText(ImVec2(px - ts.x * 0.5f, py - ts.y * 0.5f), IM_COL32(255, 255, 255, 255),
+                  f.label);
+    }
+  }
+  (void)kGray;
+
+  ImGui::Dummy(ImVec2(gap * 2 + size, gap * 2 + size));
+}
+
 }  // namespace
 
 class LauncherDialog : public rex::ui::ImGuiDialog {
@@ -138,6 +217,8 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
           st.icons = i;
         }
       }
+      ImGui::Separator();
+      launcher_draw_button_preview(st.icons, ImGui::GetFontSize() * 0.7f);
 
       ImGui::Separator();
       ImGui::TextUnformatted("Game folder (with default.xex)");

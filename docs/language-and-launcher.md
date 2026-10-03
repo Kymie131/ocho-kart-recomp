@@ -75,6 +75,9 @@ Notes:
   `PathConfig::config_path` (next to the exe).
 - Verified live: the dialog appears, the game waits for Play, Play boots the XEX, Quit
   exits, and the chosen language changes the in-game text.
-- Still to do: drawing custom Xbox/PlayStation/Nintendo glyphs. The game's own prompts
-  are baked into its assets, so those glyphs must come from launcher-side UI, not a
-  runtime setting.
+- The launcher draws its own button prompt preview (Xbox, PlayStation, Nintendo) with the
+  ImGui draw list, no game assets. Nintendo uses its swapped face layout.
+- Still to do: the in-game prompts are baked into the game's assets, so the setting only
+  changes the launcher preview today. Making the game itself show PS/Nintendo glyphs would
+  need UI interposition or asset replacement (the latter is not allowed), the same hard
+  problem Unleashed Recompiled only solved for PlayStation.
