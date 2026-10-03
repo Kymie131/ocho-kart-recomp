@@ -50,6 +50,18 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: XMA decode never runs (2026-10-03, deeper)
+
+Instrumented `XmaContext::Consume` (temporary peak log). Over a 40s run: `XMA_DIAG` never printed,
+so the XMA decoder never produces PCM. Cross-checked the same run: `XMA: Write` ~27k times (the
+`0601` lock writes), `XMPGetPlaybackController` once, `XAudioSubmitRenderDriverFrame` 10,
+`SubmitFrame` 20. So it is not "buffers with zeros downstream" alone: the XMA pipeline never
+starts. The guest hammers the `0601` register with `0x02`/`0x03` (a lock/handshake) and the shim
+ignores it, so no decode is kicked. Menu music is the XMP path, which has no playback
+implementation at all (`XMPRegisterCodec` is a stub). Two real fixes needed: (1) implement the XMA
+context kick/handshake so `Decode` actually runs, (2) implement XMP playback or confirm menu audio
+falls back to XA. Both are upstream-scale, not a one-line shim. Instrumentation reverted.
+
 ## Audio: guest delivers silence (2026-10-03)
 
 Measured with a temporary RMS/peak log in `SDLAudioDriver::SubmitFrame`. The guest does call
