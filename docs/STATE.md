@@ -48,6 +48,28 @@ the guest hands to the callback is all zeros. The XMA `0601` write is a lock reg
 ignored on purpose (`xma_decoder.cpp`), not the cause. Next: check whether XMA decode produces
 zeros, or the guest never fills the buffer (XMP playlist path for menu music vs XMA for races).
 
+## Audio diagnosis (read-only, 2026-10-03)
+
+Two separate audio paths, both silent for different reasons:
+
+**XMA (races, effects).** The guest calls `XAudioSubmitRenderDriverFrame` and
+`SDLAudioDriver::SubmitFrame`, the endpoint opens at 2ch/48kHz, but a temporary RMS/peak log showed
+every submitted frame is `peak=0.0 rms=0.0`. The output path is correct; the guest hands over an
+all-zero buffer, so the decode upstream is not producing samples. The `XMA: Write to unknown
+register (0601)` spam is a lock register already ignored on purpose
+(`src/audio/xma_decoder.cpp`, `WriteRegister`), so it is not the cause. Next step (not started):
+instrument `XmaContext`/`xma_decoder` decode to see whether it produces non-zero PCM, and check
+whether the guest fills the buffer before the callback.
+
+**XMP (menu music).** `src/kernel/xam/apps/xmp_app.cpp` implements `XMPGetPlaybackController`
+(case `0x0007001B`) as a no-op: it writes zero to the controller and locked pointers and sleeps. The
+playlist calls (`XMPCreateTitlePlaylist`, `XMPPlayTitlePlaylist`) track state but there is no
+decoder wired to them, and `XMPRegisterCodec` is a `REX_EXPORT_STUB`. So menu music has no playback
+implementation. Next step (not started): a real XMP playback path, or confirm the title falls back
+to XA/streaming for menu audio.
+
+Neither shim was implemented in this session, per instruction to document only.
+
 ## Open issue: launcher closes with no input (2026-10-03)
 
 Reported twice: the launcher window closes on its own while the user is away from the machine.
