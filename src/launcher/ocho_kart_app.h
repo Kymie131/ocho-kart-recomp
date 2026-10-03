@@ -174,7 +174,55 @@ inline void launcher_draw_button_preview(int style, float size) {
   }
   (void)kGray;
 
-  ImGui::Dummy(ImVec2(gap * 2 + size, gap * 2 + size));
+  // Shoulder buttons and triggers below the face buttons. Labels differ per
+  // platform: Xbox LB/RB + LT/RT, PlayStation L1/R1 + L2/R2, Nintendo L/R + ZL/ZR.
+  const char* bl;
+  const char* br;
+  const char* tl;
+  const char* tr;
+  if (style == 2) {
+    bl = "L1";
+    br = "R1";
+    tl = "L2";
+    tr = "R2";
+  } else if (style == 3) {
+    bl = "L";
+    br = "R";
+    tl = "ZL";
+    tr = "ZR";
+  } else {
+    bl = "LB";
+    br = "RB";
+    tl = "LT";
+    tr = "RT";
+  }
+
+  const float shoulder_w = size * 1.5f;
+  const float shoulder_h = size * 0.8f;
+  const float shoulder_y = origin.y + gap * 2 + size * 0.4f;
+  const float left_x = origin.x;
+  const float right_x = origin.x + gap * 2;
+  struct Shoulder {
+    float x;
+    float y;
+    const char* label;
+    ImU32 color;
+  };
+  const Shoulder shoulders[4] = {
+      {left_x, shoulder_y - shoulder_h * 1.3f, bl, kGray},
+      {right_x, shoulder_y - shoulder_h * 1.3f, br, kGray},
+      {left_x, shoulder_y, tl, IM_COL32(0x50, 0x50, 0x50, 255)},
+      {right_x, shoulder_y, tr, IM_COL32(0x50, 0x50, 0x50, 255)},
+  };
+  for (const auto& s : shoulders) {
+    dl->AddRectFilled(ImVec2(s.x, s.y), ImVec2(s.x + shoulder_w, s.y + shoulder_h), s.color,
+                      3.0f);
+    const ImVec2 ts = ImGui::CalcTextSize(s.label);
+    dl->AddText(ImVec2(s.x + (shoulder_w - ts.x) * 0.5f, s.y + (shoulder_h - ts.y) * 0.5f),
+                IM_COL32(255, 255, 255, 255), s.label);
+  }
+
+  ImGui::Dummy(ImVec2(gap * 2 + shoulder_w, gap * 2 + size * 0.4f + shoulder_h * 2.3f));
 }
 
 }  // namespace
