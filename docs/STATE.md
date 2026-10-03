@@ -48,10 +48,28 @@ Windows code:
 The abort offset `ucrtbase+0xA527E` is identical across all `0xC0000409` events, pinpointing the abort path.
 2026-10-03: 5 peels added (`0x833E8B00` 8, `0x8249B218` 16, `0x82C1A430` 24, `0x824A8810` 28, `0x826C84C0` 40); manifest 28→33 `_peel` entries. The long debug run then survived ~71s (vs 36-74s before) and hit the `rexruntimerd.dll+0x1211D1` AV above.
 
+Full stack for that AV (cdb `kv` on `CrashDumps\ocho_kart.exe.4996.dmp`; no `rexruntimerd.pdb`, but the DLL's own symbols resolve):
+
+```
+ThreadStartRoutine -> XHostThread::Execute -> XThread::Execute
+ -> ocho_kart!sub_830E9C98 -> sub_8235CB60 -> sub_829F5BD0   (guest)
+ -> rexruntimerd!_imp__XamInputGetState -> XamInputGetState_entry
+ -> rex::input::InputSystem::GetState+0x109
+ -> rex::input::InputSystem::RefreshDevices+0x641
+ -> std::_Destroy_range<std::allocator<rex::input::DeviceInfo>>+0x61   (AV: rcx = 0)
+```
+
+`GetState`, `SetState`, `GetCapabilities` and `GetKeystroke` each call `RefreshDevices()`
+(`src/input/input_system.cpp:194,221,260,302`), which mutates the shared
+`devices_`/`device_owners_` vectors with **no lock** (`:81`). These entry points run on guest
+threads. Concurrent calls race on those vectors and the allocator -> corrupt `DeviceInfo`/heap.
+This is the most likely single root cause behind **both** this AV and the `0xC0000374`, and it
+is an **upstream SDK bug**, not game code.
+
 ## Next
 
-1. Get a stack for the `rexruntimerd.dll+0x1211D1` AV. Symbol names resolve from the DLL itself (`llvm-objdump`), but there is no local PDB — install Debugging Tools (`cdb`) or obtain the SDK's `rexruntimerd.pdb`.
-2. The corrupt `DeviceInfo` is host-heap corruption in the input subsystem — likely the same family as the `0xC0000374`; investigate together.
+1. Confirm the race: check whether the guest calls `XamInputGetState`/`XamSetState`/`XamInputGetKeystroke` from more than one thread (log thread ids), or instrument `RefreshDevices`.
+2. Patch `rex::input::InputSystem` to serialize `RefreshDevices()` (mutex around `devices_`/`device_owners_`), rebuild the SDK runtime, re-run. Likely fixes both this AV and the `0xC0000374`.
 3. Investigate the `0xC0000005` in the GPU plugin (run-race3) separately.
 4. Map the movie/splash asset paths so the cinematics and post-intro screens load.
 5. Phase 2 (UModel catalog) in parallel.
