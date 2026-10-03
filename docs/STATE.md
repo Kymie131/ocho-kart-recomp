@@ -43,14 +43,15 @@ Windows code:
 | `0xC0000409` (BEX64, P9=7) | ucrtbase.dll+0xA527E | `std::abort()` from the `Call to invalid or unregistered function` trap (`external/rexglue-sdk/src/system/function_dispatcher.cpp:38`). **Not** stack corruption. | every run that hits an unregistered target (deterministic) |
 | `0xC0000374` | ntdll.dll | genuine host heap corruption; log stops with no FATAL (`run-race2.log`, 07:45:27) | once so far |
 | `0xC0000005` | rexgpu-xenosrd.dll+0x1D281 | access violation inside the Xenos GPU plugin (`run-race3.log`, 07:58:28) | once so far |
+| `0xC0000005` | rexruntimerd.dll+0x1211D1 | `std::_Destroy_range<std::allocator<rex::input::DeviceInfo>>` freeing a `DeviceInfo` whose `guid` string has a bad pointer — input subsystem (`run-long2.log`, 2026-10-03 09:24:47, ~71s in) | frontier after 5 peels |
 
 The abort offset `ucrtbase+0xA527E` is identical across all `0xC0000409` events, pinpointing the abort path.
-Latest unpeeled target: `0x833E8B00` (run-race4, 07:59); note `0x833E8B08` is already in the manifest.
+2026-10-03: 5 peels added (`0x833E8B00` 8, `0x8249B218` 16, `0x82C1A430` 24, `0x824A8810` 28, `0x826C84C0` 40); manifest 28→33 `_peel` entries. The long debug run then survived ~71s (vs 36-74s before) and hit the `rexruntimerd.dll+0x1211D1` AV above.
 
 ## Next
 
-1. Peel `0x833E8B00` (continue `tools/peel.ps1`) — the race-start blocker is a missing function, not memory corruption.
-2. Investigate the genuine `0xC0000374` (run-race2) separately: page heap / ASan, only after the peeling noise is gone.
+1. Get a stack for the `rexruntimerd.dll+0x1211D1` AV. Symbol names resolve from the DLL itself (`llvm-objdump`), but there is no local PDB — install Debugging Tools (`cdb`) or obtain the SDK's `rexruntimerd.pdb`.
+2. The corrupt `DeviceInfo` is host-heap corruption in the input subsystem — likely the same family as the `0xC0000374`; investigate together.
 3. Investigate the `0xC0000005` in the GPU plugin (run-race3) separately.
 4. Map the movie/splash asset paths so the cinematics and post-intro screens load.
 5. Phase 2 (UModel catalog) in parallel.
