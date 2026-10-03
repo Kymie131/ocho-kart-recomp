@@ -91,3 +91,8 @@ includes = []
 0x82CD8870 = { name = "sub_82CD8870_peel", size = 32 }
 0x82D528B0 = { name = "sub_82D528B0_peel", size = 168 }
 0x82B85448 = { name = "sub_82B85448_peel", size = 8 }
+0x8331B5C8 = { name = "sub_8331B5C8_peel", size = 24 }
+0x82D7B298 = { name = "sub_82D7B298_peel", size = 8 }
+0x82C5E7B8 = { name = "sub_82C5E7B8_peel", size = 72 }
+0x82C05838 = { name = "sub_82C05838_peel", size = 24 }
+0x82BFE408 = { name = "sub_82BFE408_peel", size = 24 }

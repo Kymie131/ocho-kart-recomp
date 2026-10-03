@@ -46,8 +46,8 @@ $blog = "$ProjectDir\docs\boot-$Tag.log"
 Remove-Item $blog,"$blog.err","$blog.out" -Force -ErrorAction SilentlyContinue
 $rp = Start-Process -FilePath $exe -ArgumentList @("--game_data_root","`"$DumpPath`"","--gpu_plugin","xenos","--log_file","`"$blog`"","--log_level","info") `
     -WorkingDirectory $bdir -RedirectStandardOutput "$blog.out" -RedirectStandardError "$blog.err" -NoNewWindow -PassThru
-Start-Sleep -Seconds 30
+Start-Sleep -Seconds 90
 $alive = -not $rp.HasExited
 if ($alive) { Stop-Process -Id $rp.Id -Force -ErrorAction SilentlyContinue }
-Write-Output "[4/4] ran; alive after 30s: $alive"
+Write-Output "[4/4] ran; alive after 90s: $alive"
 Get-Content -LiteralPath $blog -Tail 6 -ErrorAction SilentlyContinue
