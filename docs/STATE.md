@@ -50,6 +50,21 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Heap crash reanalysis: it is D3D12 presenter, not input (2026-10-03)
+
+Re-checked dump `ocho_kart.exe.39732.dmp` (11:31) which had not been looked at before:
+`HEAP_CORRUPTION_ACTIONABLE_BlockNotBusy_DOUBLE_FREE` in `ucrtbase!free_base` /
+`ntdll!RtlFreeHeap`. Stack: `rexruntimerd+0x121195` <- `rexruntimerd+0x11d581`.
+
+I first assumed this was the InputSystem race because the offsets sat near `+0x1211d1`. objdump
+disproves that: `rexruntimerd+0x11d581` is inside `ui::d3d12::D3D12Presenter` (a
+`unique_ptr<D3D12Presenter>` destructor), not `RefreshDevices`. So the `0xC0000374` double-free is a
+**separate bug in the D3D12 presenter teardown**, not the input race. Correcting the earlier
+guess. The input fix does not address this one. A fresh symbolicated stack (matching PDB) is needed;
+the current PDB is newer than this dump. Also note the two 17:24-17:25 crashes were from
+instrumented runs (a `static std::set` in a multithreaded MMIO thunk is itself unsafe) and are not
+worth chasing.
+
 ## Audio reversing: full chain, contexts never initialized (2026-10-03, chapter 3)
 
 Read-register logging shows the guest reads `0x7FEA1800` (reg `0x600` = ContextArrayAddress): it
