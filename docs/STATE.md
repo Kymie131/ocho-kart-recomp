@@ -187,12 +187,27 @@ Note the entry point here is `XamInputSetState` (rumble), a *different* XInput e
 samples only saw single-threaded `GetState`, which is why the race looked unconfirmed; the
 `SetState` path is the one that traps it. Upstream SDK bug in `rex::input::InputSystem`.
 
-## Next
+## Next (updated 2026-10-03)
 
-1. Fix `rex::input::InputSystem`: guard `devices_`/`device_owners_` (and `RefreshDevices`) with a mutex, or make `RefreshDevices` idempotent/skip when nothing changed. Rebuild `rexruntimerd` from `external/rexglue-sdk` and re-run with page heap to confirm the trap is gone.
-2. Report upstream to `rexglue-sdk` with both stacks (`GetState` AV and `SetState` heap trap).
-3. Investigate the `0xC0000005` in the GPU plugin (run-race3) separately.
-4. Map the movie/splash asset paths so the cinematics and post-intro screens load.
+Done since the previous list: the InputSystem lock fix (committed `73f6691`), the upstream issue
+#475 with the full diff, and the local patch saved.
+
+Still open:
+
+1. Audio. XMA delivers all-zero frames (decode upstream) and the XMP menu path has no playback
+   implementation (`XMPRegisterCodec` is a stub). See the two audio sections above. This is a
+   deliberate session of its own.
+2. Launcher closes with no input while the machine is unattended (not reproduced in a 4-minute idle
+   run). See "Open issue" above. Suspected external window close request.
+3. `0xC0000005` seen once in the GPU plugin. Analyzed with cdb on dump `ocho_kart.exe.36364.dmp`:
+   `INVALID_POINTER_READ` at `rexgpu-xenosrd.dll+0x1d281` (module timestamp `0x6a88d2d8` =
+   2026-08-21, the prebuilt SDK plugin). The stack is all inside the plugin (symbolized only as
+   `rex_gpu_create+offset` because there is no PDB for the prebuilt). The local build has its own
+   `rexgpu-xenosrd.pdb` but it does not match the prebuilt that crashed, so a precise function
+   could not be recovered. Next step: reproduce on the current locally built plugin; if it recurs,
+   symbolizer now has the matching PDB.
+4. Cinematics: title asks for `.xxx`/`.txt` movie containers, the dump ships raw `.BIK`, and the
+   runtime has no Bink decoder. Needs UE3 packaging plus a decoder, not just path mapping.
 5. Phase 2 (UModel catalog) in parallel.
 
 ## Paths
