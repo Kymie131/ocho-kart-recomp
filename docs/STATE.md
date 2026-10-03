@@ -21,7 +21,8 @@ Updated 2026-10-03.
 **Input heap corruption: fixed and confirmed.** The stack was `XamInputGetState`/`XamInputSetState`
 into `rex::input::InputSystem::RefreshDevices`, which rebuilds `devices_`/`device_owners_` with no
 lock while guest threads can call it concurrently. Full page heap trapped it; the fix serializes
-the access. Patch in `docs/toolchain/rexglue-input-refreshdevices-lock.patch`, runtime rebuilt and
+the access. Patch in `docs/toolchain/rexglue-input-lock-and-launcher-cvar.patch` (also adds the
+`launcher_button_icons` cvar), runtime rebuilt and
 deployed. The vendored `external/rexglue-sdk` keeps the change uncommitted for an upstream PR.
 
 **Stutter is not the clock.** Measured the xenos vblank worker with a temporary log: both with and
@@ -39,6 +40,13 @@ VFS resolution is case-insensitive (`entry.cpp`), and `D:` maps correctly, so th
 missing `.xxx`/`.txt`, not casing. Even if renamed, these are Bink video and the runtime has no
 Bink decoder, so the picture would still be missing. This needs the UE3 packaging (Phase 2) and a
 Bink decoder, not a path alias.
+
+**Launcher options scaffold.** The `launcher_button_icons` cvar (`auto|xbox|playstation|nintendo`)
+is registered in the runtime and shows up under the `Launcher` category of the settings overlay.
+Language is already covered by `user_language` (`--user_language 5` selects Spanish MX); the
+launcher should map friendly names onto it. Glyph drawing for PS/Nintendo is launcher UI work, not
+a runtime setting, because the game's own prompts are baked into its assets. Design notes in
+`docs/language-and-launcher.md`.
 
 ## Milestone: stable boot with GPU (2026-10-03)
 
