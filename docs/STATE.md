@@ -125,6 +125,25 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: shim compared to Xenia XmaContextNew (2026-10-03, final)
+
+Fetched Xenia Canary's current `xma_decoder.cc` and `xma_context_new.cc` and compared against the
+shim's `xma_decoder.cpp`/`xma_context.cpp`. On every point the shim matches Xenia: Work() gating on
+is_enabled/is_allocated and clearing enable, the Kick/Lock/Clear handling, the Consume/Decode
+stalling rules, PrepareOutputRingBuffer, StoreContextMerged. The shim's `xma_context.cpp` is the
+ported XmaContextNew. No shim divergence found.
+
+Ran Xenia on the dump (installed `Xenia.XeniaCanary`): it boots and runs; at the intro it also issues
+exactly **one** `XMACreateContext`, same as the recomp. So the recomp is not creating fewer
+contexts. Xenia's funcall trace lists only exports, not internal `82B8...` calls, so the difference
+in the guest driver cannot be seen from its log.
+
+Conclusion (closed): the shim is faithful to Xenia and the count matches. The remaining gap is
+purely inside the guest's software audio driver, and isolating it needs an interactive guest
+debugger (`xenia --debug` with a breakpoint in the voice manager `sub_82B893A0`), which this
+environment cannot drive. No further shim-side fix is warranted by evidence; a speculative change
+would risk the effects that currently work. Documented as the stopping point.
+
 ## Audio: shim hypotheses all refuted by measurement (2026-10-03, final)
 
 Compared ReXGlue's shim against Xenia's current `xma_decoder.cc` line by line and tested each
