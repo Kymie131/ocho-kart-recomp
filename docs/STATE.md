@@ -50,6 +50,25 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: guest only writes the 0x1804 transaction reg, never a kick (2026-10-03, closed)
+
+Logged the first 200 XMA MMIO writes during a career run. Every write is `0x7FEA1804`
+(reg 0x601) alternating `0x02000000`/`0x03000000`, i.e. start/end of the driver's 320-context
+sweep. The shim **never** receives a kick (0x650), lock (0x690) or clear (0x6A0) write. So the
+guest's context loop has nothing to process: no context ever carries the ready bit it tests, and no
+decode is kicked. Combined with the mix buffer flipping silence<->garbage (~9.1e30) every ~10ms, the
+music stream decodes uninitialized memory.
+
+Full chain (all verified): the guest creates one XMA context (an effect that audibly plays) and
+drives the rest of audio in software (`sub_82B8AC20` / `sub_82B8B448`) by writing context registers
+it never actually kicks, because the contexts it expects to iterate are never marked ready. The shim
+implements Kick/Lock/Clear registers but they are never hit.
+
+Fix direction (not a one-liner): make the driver's context sweep find ready contexts. Either the
+shim must publish contexts as ready (the state the guest tests before its `stwbrx` to 0x650/0x6A0),
+or find why the guest's voice list only yields one context. This needs a focused session comparing
+against Xenia's XmaContext behaviour. All instrumentation reverted; runtime clean.
+
 ## Audio: mix buffer alternates silence and garbage every ~10ms (2026-10-03)
 
 Final measurement: logged silence<->signal transitions on the shared mix buffer. It flips
