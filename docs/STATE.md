@@ -50,6 +50,20 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio manager located (2026-10-03)
+
+Traced the title's audio manager chain:
+`sub_82B893A0` (manager) -> `sub_82B8B8C0` (dispatch/construct, called with channel count 6) ->
+`sub_82B8AC20` (creates one XMA context per voice via `XMACreateContext`) -> `XMACreateContext`.
+`sub_82B8B6C0` is the voice teardown (frees a slot in the 320-entry array at `0x83C12330`).
+
+So the manager does intend multiple channels (6), yet only one XMA context is created at runtime.
+The deciding input is the voice/channel list the manager walks (`sub_82B893A0` iterates pointers
+via `88(r27)` and a linked list at `16256`). Confirming why that list yields one entry needs runtime
+inspection, not more static reading. Next step for a real fix: run the same title under Xenia (which
+plays audio) and compare how many contexts its XMA decoder is asked to create at the same point;
+the divergence will show what the shim answers differently. No speculative shim change was made.
+
 ## Audio: shim verified correct; block is the game's own software XMA driver (2026-10-03)
 
 Checked the shim end to end against Xenia: `kContextCount = 320` (matches the guest), `AllocateContext`
