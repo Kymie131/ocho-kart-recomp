@@ -2,6 +2,81 @@
 
 Updated 2026-10-03.
 
+## Audio: the game's own audio engine (not XMP, not the shim) is the blocker (2026-10-03)
+
+Deeper session on the engine side, with temporary in-`.cpp` diagnostics added to the generated
+recomp files (`ocho_kart_recomp.274/301/89/299.cpp`), reverted after each run; the instrumented
+copies are kept outside the repo and the final build is clean. Key measured facts on the current
+build, from a fresh boot through the intro into the menu:
+
+- **The voice-list manager `sub_82B893A0` never runs.** It was instrumented at its single return
+  site; across an 80 s boot-to-menu it was reached **0 times**. This is the function that assembles
+  the per-voice work list and calls the context creator `sub_82B8B8C0` → `sub_82B8AC20` →
+  `XMACreateContext`.
+- **The engine tick `sub_82B8B448` runs constantly** (~27.5k calls in 75 s across two guest threads),
+  but it only sweeps the 320-slot context array at `0x83C12330` and finds it empty. So the engine is
+  on, but **no voices/contexts were ever registered**, which is exactly why the mix buffer stays
+  zero (or uninitialised garbage).
+- **`sub_82B8B8C0` and `sub_82B8AC20` are never called** in that same run — not even the single
+  context creation the earlier session had recorded (that one came from a different moment/run where
+  the engine had reached the codec path). Confirms the list is never built in the menu.
+- **The device bring-up works.** `sub_82BB18B8` runs and calls `sub_82B8A128(0,3,6,48000,32,32,63,128)`
+  (the mixer/device create) → stores the device at voice-frame `+56`, a callback buffer via
+  `sub_82B7BA48` at `+60`, then `sub_82BAD368` three times (three voice workers at `+76/+80/+84`) —
+  those `sub_82BAD368` calls were seen (6 across two boot phases, args `r3=0/1`). So the codec/device
+  path is exercised, but the **playback** path that registers XMA voices is not.
+- **XMP is a dead end for this title.** Separately re-confirmed: the title calls
+  `XMPGetPlaybackController` once after the intro, gets "unhandled" (shim writes 0), then immediately
+  calls `XMPSetPlaybackController(xmp_client=0, controller=1)` — i.e. it declares *itself* the
+  playback owner and from then on plays everything through its own mixer. It never calls
+  `XMPCreateTitlePlaylist`/`XMPPlayTitlePlaylist` (0 calls). So XMP playback is not the mechanism the
+  title uses; the `Bink Snd` threads are the cinematic audio and are not the menu/race mixer.
+
+Conclusion: menu music and engine sound are silent because the title's own mixer/XAudio path never
+registers voices, and that is title logic reached only when the engine decides to play. The shim
+(XMA, XAudio, XMP) is not the blocker: XMA exports are never called, XMP is used only for the
+ownership handshake, and the audio endpoint opens correctly at 2ch/48kHz. Fixing this is a dedicated
+engine-debug session (find what the title waits for before it builds its voice list — a system/state
+gesture, an XMP/notification signal, or an asset it fails to load), not a one-line shim patch. No
+code change was kept; the runtime and generated files are reverted and rebuilt clean.
+
+## Audio: the innermost blocker is XMP, and it is now proven on the current build (2026-10-03)
+
+Re-ran the audio front on the current build with fresh, reverify-able instrumentation (a small
+`xma_diag` counter in `xma_decoder.cpp`, reverted after the run; the instrumented copy is kept
+outside the repo). A 15 s menu run produced an unambiguous picture:
+
+- **The XMA context-array read never happens.** The `XMA_DIAG` log on `ReadRegister` for
+  `ContextArrayAddress` (reg `0x600`) did not fire once. The worker's periodic line never fired
+  either, because the XMA worker thread did ~0 work: **`AllocateContext` was never called** during
+  the menu, and the shim received **no kick/lock/clear** (reg `0x650/0x690/0x6A0`).
+- **The only XMA traffic is the scalar `0x0601` scribble.** Two guest threads hammer
+  reg `0x601` with `0x02000000`/`0x03000000` (~24k writes in 15 s). Xenia ignores this register on
+  purpose, and the guest's `sub_82B8B448` keeps *its own* context metadata in guest RAM
+  (`sub_82B8AC20` reads cache-line tag words with `REX_MM_LOAD`, so that copy is streamed/uncached,
+  updated directly by the guest's software XMA driver).
+- **The title is parked in XMP, not XMA.** During the same menu, `XMPGetPlaybackController`
+  (arg `0x0007001B`, xmp_client `2`, `controller_ptr`/`locked_ptr` in guest RAM) is called **once per
+  second**, and *nothing else* — no XMA API call, no `XMPCreateTitlePlaylist`, no
+  `XMPPlayTitlePlaylist`.
+
+Combined with the shim's `case 0x0007001B` handler, which writes `0` into the controller/locked
+outputs (`src/kernel/xam/apps/xmp_app.cpp:408`), this gives the concrete innermost blocker for menu
+music: **the title polls the XMP playback controller, gets "controller = 0" forever, and therefore
+never starts playback.** The `0x0601` scribble is the XMA *engine* running (and finding no work),
+not the thing holding playback back.
+
+This corrects the earlier "guest only writes 0x1804 and never reads 0x600" line: on this build the
+`0x600` read is simply *never made* — the title has not reached the context-array path, it is
+sitting in the XMP poll. The earlier reading of a one-entry context list was measured at a different
+moment (a run whose audio subsystem had reached the XMA path).
+
+Next, concrete and small enough for a session: determine the controller value the title expects
+(what the real XAM writes on a playback-capable console) and return it from `0x0007001B`, then
+observe whether the title proceeds to create/play a playlist. That is a real, bounded fix candidate
+for **menu music**; the XMA kick path remains the separate race/effects gap. No shim change was made
+in this session (analysis only).
+
 ## Where we are
 
 | Phase | Status |
@@ -49,6 +124,23 @@ Evidence (Tarea B):
 - Result: the `0xC0000005` is gone across both runs. Consistent with one bug (the race) showing as
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
+
+## Audio: shim hypotheses all refuted by measurement (2026-10-03, final)
+
+Compared ReXGlue's shim against Xenia's current `xma_decoder.cc` line by line and tested each
+candidate:
+- register ranges Kick/Lock/Clear: identical to Xenia. Correct.
+- kContextCount 320, AllocateContext, BitMap Acquire/Release: correct.
+- `MmGetPhysicalAddress` for the context: measured `0xFFC9A000 -> 0x1FC9B000`, no failure. Correct.
+- context array base published at reg 0x600 and read by the guest: confirmed working.
+
+So every shim-side hypothesis is refuted with runtime data. The shim is faithful to Xenia. The
+remaining unknown is why the guest never writes a context Kick (only the 0x1804 transaction), which
+is inside the title's own software audio driver and its voice list. Resolving it needs an
+interactive debugger on the guest at the point `sub_82B893A0`/`sub_82B8B8C0` build the voice list,
+which is beyond static reading. Xenia is installed (`Xenia.XeniaCanary`) to eventually compare
+context-creation counts; not run yet (needs the same input/GPU constraints). No shim change; all
+instrumentation reverted.
 
 ## Audio manager located (2026-10-03)
 
@@ -474,9 +566,12 @@ Done since the previous list: the InputSystem lock fix (committed `73f6691`), th
 
 Still open:
 
-1. Audio. XMA delivers all-zero frames (decode upstream) and the XMP menu path has no playback
-   implementation (`XMPRegisterCodec` is a stub). See the two audio sections above. This is a
-   deliberate session of its own.
+1. Audio. **Engine is the blocker (2026-10-03, latest):** the title's own mixer never registers voices
+   (`sub_82B893A0` runs 0 times; `sub_82B8B8C0`/`sub_82B8AC20` never called), while the engine tick
+   `sub_82B8B448` runs constantly over an empty 320-slot array. XMP is only the ownership handshake
+   (`GetPlaybackController` → 0, then `SetPlaybackController(0,1)`), and XMA exports are never called.
+   Needs a dedicated engine-debug session to find what the title waits for before building its voice
+   list. See the top section. Not a one-line shim change.
 2. Launcher closes with no input while the machine is unattended (not reproduced in a 4-minute idle
    run). See "Open issue" above. Suspected external window close request.
 3. `0xC0000005` seen once in the GPU plugin. **Checked on the current build: not reproduced.**
