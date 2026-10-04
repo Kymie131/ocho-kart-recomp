@@ -50,6 +50,17 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: single mix stream; music has no XMA context (2026-10-03, next)
+
+The system has a single XAudio client (callback 82BB13A8, buffer 83C12870); music and effects share
+one stream. The guest creates only one XMA context (for the effect that plays), so there is no
+decoded music to mix. The context-creation loop is `sub_82B8AC20` (called from `sub_82B8B6C0` in
+`ocho_kart_recomp.299`) iterating a list at `0(r3)`; only one entry ran, so the music voice never
+gets a context.
+
+Next step: find why the voice list only yields one XMA context (why the music/BGM voice is absent),
+which is the concrete fix for background music. Reading only, no runtime change yet.
+
 ## Audio: gameplay effects work, background music does not (2026-10-03)
 
 User observation while playing: sound plays when the kart crashes/respawns (gameplay effects), but
