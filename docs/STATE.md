@@ -50,6 +50,24 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio measured live: intro works, game buffer is zero then garbage (2026-10-03)
+
+Live test report: audio plays through the intro cinematic, then goes silent once in the menu; the
+user completed a full cup (5 races) and 2-player works. So it is not total silence.
+
+Measured `SDLAudioDriver::SubmitFrame` (thread-safe RMS/peak per second):
+- first ~9s: `rms=0.0 peak=0.0` (silence)
+- then: `peak ≈ 3.4e38` (FLT_MAX) and `rms=nan` every second.
+
+3.4e38 is float overflow/uninitialized memory, not valid samples. So the game's XAudio buffer
+(`83C12870`) is all zeros at first and later full of garbage. The audio that is audible in the
+intro therefore does **not** come through this buffer (the cinematic has its own track/path); the
+game's own mix (menu/effects) is the buffer that is zero/garbage. This ties back to the XMA context
+never being initialized: the guest reads uninitialized state and pushes bad floats.
+
+Instrumentation reverted (this time thread-safe: atomic counters, no shared std::set; the earlier
+`static std::set` in a multithreaded thunk is what caused the 17:24 double-free crash).
+
 ## Heap crash reanalysis: it is D3D12 presenter, not input (2026-10-03)
 
 Re-checked dump `ocho_kart.exe.39732.dmp` (11:31) which had not been looked at before:
