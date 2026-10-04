@@ -50,6 +50,15 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: mix buffer alternates silence and garbage every ~10ms (2026-10-03)
+
+Final measurement: logged silence<->signal transitions on the shared mix buffer. It flips
+SILENCE (peak 0) <-> SIGNAL (peak ~9.1e30, a huge non-PCM value) about every 10ms. So the guest
+writes uninitialized/garbage floats into the shared stream buffer, alternating with zeros. That is
+the signature of decoding reading uninitialized memory, consistent with the XMA context never
+being populated for music. Effects play because their one context is set; the music stream feeds
+garbage. All instrumentation now reverted; runtime rebuilt clean.
+
 ## Audio: single mix stream; music has no XMA context (2026-10-03, next)
 
 The system has a single XAudio client (callback 82BB13A8, buffer 83C12870); music and effects share
