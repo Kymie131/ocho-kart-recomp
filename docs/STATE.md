@@ -50,6 +50,24 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: shim verified correct; block is the game's own software XMA driver (2026-10-03)
+
+Checked the shim end to end against Xenia: `kContextCount = 320` (matches the guest), `AllocateContext`
+returns a real guest pointer, `BitMap::Acquire/Release` are correct, and `WriteRegister` handles
+Kick/Lock/Clear exactly like Xenia. The shim is not the bug.
+
+The title imports only `XMACreateContext`/`XMAReleaseContext` (no Enable/Disable/SetBuffer), and its
+`sub_82B8AC20`/`sub_82B8B448` drive XMA entirely in software: they fill context structs in guest
+memory, `MmMapIoSpace` them, and write context registers. During a career run only **one** XMA
+context is created, and the MMIO log shows only `0x7FEA1804` start/end writes, no kick. So the
+game's own context sweep finds an empty list and never decodes music; effects play from the one
+context.
+
+This means the fix is not a shim change: it depends on why the game's voice list yields a single
+context. That is title logic, needs reading the game's audio manager (the list at `0x83C12330` and
+the caller chain into `sub_82B8AC20`/`sub_82B8B6C0`). No speculative audio shim was written.
+Instrumentation reverted; runtime clean. This is the honest stopping point for the audio session.
+
 ## Audio: guest only writes the 0x1804 transaction reg, never a kick (2026-10-03, closed)
 
 Logged the first 200 XMA MMIO writes during a career run. Every write is `0x7FEA1804`
