@@ -50,6 +50,22 @@ Evidence (Tarea B):
   several crash signatures. Not proven to be the same as the old `0xC0000374` (that one was a single
   heap-corruption event), but it was the same call site family.
 
+## Audio: gameplay effects work, background music does not (2026-10-03)
+
+User observation while playing: sound plays when the kart crashes/respawns (gameplay effects), but
+after the intro cinematic, at the Start menu, there is no music. So the game's XMA path is not
+universally dead; effects work.
+
+Instrumented `XmaDecoder::AllocateContext` (INFO). A career run created **exactly one XMA context**
+(`id=0 guest=0xFFCA6000`). One context is enough for the effect that plays, but background music
+likely needs its own context/stream that never gets created, or goes through the XMP system, whose
+playback is unimplemented (`XMPRegisterCodec` stub) and which the title only touches via
+Get/SetPlaybackController.
+
+So the remaining audio gap is **background music** specifically, not effects. `SDLAudioDriver::`
+`SubmitFrame` still shows the mixed buffer at zero then FLT_MAX garbage, consistent with the music
+stream feeding uninitialized data. Instrumentation is local only; the shim log will be reverted.
+
 ## Audio measured live: intro works, game buffer is zero then garbage (2026-10-03)
 
 Live test report: audio plays through the intro cinematic, then goes silent once in the menu; the
