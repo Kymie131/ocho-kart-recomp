@@ -14,6 +14,8 @@
 #include <rex/platform/env.h>
 #include <rex/ui/imgui_dialog.h>
 
+#include "audio/host_music.h"
+
 #include <cstring>
 
 #include <cstdint>
@@ -58,6 +60,10 @@ inline const char* const* launcher_icon_values() {
 struct LauncherState {
   int language = 0;  // index into launcher_languages()
   int icons = 0;     // index into launcher_icon_names()
+  bool music = false;  // host-side background music (bypasses the silent guest mixer)
+  bool fullscreen = false;
+  bool vsync = true;
+  int resolution_scale = 1;
   char dump[512] = {};
   bool accepted = false;
   bool cancelled = false;
@@ -98,6 +104,29 @@ inline void launcher_load_from_cvars() {
       st.icons = i;
       break;
     }
+  }
+
+  auto read_bool = [](const char* name, bool fallback) {
+    const std::string v = rex::cvar::GetFlagByName(name);
+    if (v == "true" || v == "1") {
+      return true;
+    }
+    if (v == "false" || v == "0") {
+      return false;
+    }
+    return fallback;
+  };
+  st.fullscreen = read_bool("fullscreen", false);
+  st.vsync = read_bool("vsync", true);
+  try {
+    st.resolution_scale = std::stoi(rex::cvar::GetFlagByName("resolution_scale"));
+  } catch (...) {
+    st.resolution_scale = 1;
+  }
+  if (st.resolution_scale < 1) {
+    st.resolution_scale = 1;
+  } else if (st.resolution_scale > 4) {
+    st.resolution_scale = 4;
   }
 }
 
@@ -330,6 +359,32 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
       launcher_draw_button_preview(st.icons, ImGui::GetFontSize() * 0.7f);
 
       ImGui::Separator();
+      ImGui::Checkbox("Background music (host)", &st.music);
+      ImGui::TextDisabled("Plays the dump's own FSB music; needs host_music WAVs.");
+
+      ImGui::Separator();
+      ImGui::TextUnformatted("Video");
+      ImGui::Checkbox("Fullscreen", &st.fullscreen);
+      ImGui::SameLine();
+      ImGui::Checkbox("VSync", &st.vsync);
+      ImGui::TextUnformatted("Internal resolution scale");
+      if (ImGui::RadioButton("1x", st.resolution_scale == 1)) {
+        st.resolution_scale = 1;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("2x", st.resolution_scale == 2)) {
+        st.resolution_scale = 2;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("3x", st.resolution_scale == 3)) {
+        st.resolution_scale = 3;
+      }
+      ImGui::SameLine();
+      if (ImGui::RadioButton("4x", st.resolution_scale == 4)) {
+        st.resolution_scale = 4;
+      }
+
+      ImGui::Separator();
       ImGui::TextUnformatted("Game folder (with default.xex)");
       ImGui::SetNextItemWidth(-1.0f);
       ImGui::InputText("##dump", st.dump, sizeof(st.dump));
@@ -355,6 +410,10 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
     const char* icon = launcher_icon_values()[st.icons];
     rex::cvar::SetFlagByName("user_language", std::to_string(lang_id));
     rex::cvar::SetFlagByName("launcher_button_icons", icon);
+    rex::cvar::SetFlagByName("host_music", st.music ? "true" : "false");
+    rex::cvar::SetFlagByName("fullscreen", st.fullscreen ? "true" : "false");
+    rex::cvar::SetFlagByName("vsync", st.vsync ? "true" : "false");
+    rex::cvar::SetFlagByName("resolution_scale", std::to_string(st.resolution_scale));
     auto cb = on_accept_;
     Close();
     if (cb) {
@@ -416,6 +475,16 @@ class OchoKartApp : public rex::ReXApp {
       std::snprintf(st.dump, sizeof(st.dump), "%s", current.c_str());
     }
 
+    // Default the host-music toggle on when the dump already has extracted
+    // tracks (tools/host-music.ps1), off otherwise. The cvar still wins if it
+    // was explicitly enabled.
+    {
+      const bool has_tracks =
+          std::filesystem::exists(defaults.game_data_root / "host_music" / "menu.wav") ||
+          std::filesystem::exists(defaults.game_data_root / "host_music" / "race.wav");
+      st.music = has_tracks || rex::cvar::GetFlagByName("host_music") == "true";
+    }
+
     resume_ = std::move(resume);
     defaults_ = defaults;
 
@@ -465,8 +534,55 @@ class OchoKartApp : public rex::ReXApp {
     }
   }
 
+  // Host-side music: created once the runtime (and guest memory) exist. It
+  // plays pre-decoded FSB WAVs from host_music_dir and switches menu/gameplay
+  // tracks from the guest XMA voice list. Opt-in via the host_music cvar.
+  void OnPostSetup() override {
+    if (rex::cvar::GetFlagByName("host_music") != "true") {
+      return;
+    }
+    std::filesystem::path dir;
+    const std::string configured = rex::cvar::GetFlagByName("host_music_dir");
+    if (!configured.empty()) {
+      dir = std::filesystem::path(configured);
+    } else {
+      dir = game_data_root() / "host_music";
+    }
+    auto* mem = runtime() ? runtime()->memory() : nullptr;
+    if (!mem) {
+      REXLOG_WARN("host_music: no runtime memory available; disabled");
+      return;
+    }
+    auto read_guest = [mem](uint32_t addr) -> const uint8_t* {
+      return mem->TranslateVirtual<const uint8_t*>(addr);
+    };
+    const uint32_t addr = static_cast<uint32_t>(
+        std::stoll(rex::cvar::GetFlagByName("host_music_state_addr")));
+    const uint32_t stride = static_cast<uint32_t>(
+        std::stol(rex::cvar::GetFlagByName("host_music_state_stride")));
+    const uint32_t count = static_cast<uint32_t>(
+        std::stol(rex::cvar::GetFlagByName("host_music_state_count")));
+    const float gain = static_cast<float>(std::stod(rex::cvar::GetFlagByName("host_music_gain")));
+    const int poll = std::stoi(rex::cvar::GetFlagByName("host_music_poll_ms"));
+    const int delay = std::stoi(rex::cvar::GetFlagByName("host_music_start_delay_ms"));
+
+    host_music_ = std::make_unique<ocho::audio::HostMusic>();
+    if (!host_music_->Start(dir, std::move(read_guest), addr, stride, count,
+                            rex::cvar::GetFlagByName("host_music_menu"),
+                            rex::cvar::GetFlagByName("host_music_race"), gain, poll, delay)) {
+      host_music_.reset();
+    }
+  }
+
+  void OnShutdown() override {
+    if (host_music_) {
+      host_music_->Shutdown();
+    }
+  }
+
  private:
   std::unique_ptr<LauncherDialog> launcher_dialog_;
   std::function<void(rex::PathConfig)> resume_;
   rex::PathConfig defaults_;
+  std::unique_ptr<ocho::audio::HostMusic> host_music_;
 };

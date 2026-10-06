@@ -22,3 +22,13 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "project not found: $Proj
 
 Copy-Item -LiteralPath $src -Destination $dst -Force
 Write-Output "launcher deployed: $dst"
+
+# Host-side music player, included by the launcher.
+$hostSrc = Join-Path $repoRoot 'src\audio\host_music.h'
+$hostDir = Join-Path $ProjectDir 'src\audio'
+$hostDst = Join-Path $hostDir 'host_music.h'
+if (Test-Path -LiteralPath $hostSrc) {
+    New-Item -ItemType Directory -Force -Path $hostDir | Out-Null
+    Copy-Item -LiteralPath $hostSrc -Destination $hostDst -Force
+    Write-Output "host music deployed: $hostDst"
+}
