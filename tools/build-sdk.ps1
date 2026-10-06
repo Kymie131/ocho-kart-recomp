@@ -1,4 +1,4 @@
-# Build and install the patched ReXGlue SDK (runtime + rexglue.exe) from the
+﻿# Build and install the patched ReXGlue SDK (runtime + rexglue.exe) from the
 # vendored submodule, so the game links against this repo's kernel fixes
 # (DPC dispatch, cache: mount, input lock, XMA work, launcher cvars).
 #
@@ -26,6 +26,9 @@ if (-not $SkipPatch) {
     & (Join-Path $PSScriptRoot 'apply-sdk-patches.ps1')
     if ($LASTEXITCODE -ne 0) { throw "patching failed" }
 }
+
+# libmspack ships its cabextract/mspack sources as git symlinks; see common.ps1.
+Repair-GitSymlinks -Root $sdk
 
 $buildDir = Join-Path $sdk 'out\build\win-amd64'
 $configs = @('Release')

@@ -140,6 +140,11 @@ try {
         throw "the repo has uncommitted changes in $RepoDir; commit or stash them, then re-run"
     }
     Invoke-Checked { git checkout $Branch } 'git checkout'
+    # A newer bundle (fixes sent after the first run) fast-forwards the branch.
+    if (Test-Path -LiteralPath $Bundle) {
+        Invoke-Checked { git fetch $Bundle $Branch } 'git fetch bundle'
+        Invoke-Checked { git merge --ff-only FETCH_HEAD } 'git merge --ff-only (bundle)'
+    }
     Write-Host 'fetching submodules (first time downloads several GB)...'
     Invoke-Checked { git submodule update --init --recursive } 'git submodule update'
 } finally { Pop-Location }
