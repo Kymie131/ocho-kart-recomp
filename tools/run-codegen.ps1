@@ -1,4 +1,4 @@
-# Run ReXGlue codegen on a local analysis project.
+﻿# Run ReXGlue codegen on a local analysis project.
 # Generated C++ stays outside this repo.
 #
 # Usage:
@@ -31,14 +31,25 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "analysis project not fou
 $dump = ($DumpPath -replace '\\', '/').TrimEnd('/')
 $projManifest = Join-Path $ProjectDir 'ocho_kart_manifest.toml'
 
+# Output folder must match what the project's src/main.cpp includes:
+# `rexglue init` from v0.10.0 writes "generated/default/<name>_init.h", older
+# projects used "generated/<name>_init.h".
+$outDir = 'generated'
+$mainCpp = Join-Path $ProjectDir 'src\main.cpp'
+if ((Test-Path -LiteralPath $mainCpp) -and ((Get-Content -LiteralPath $mainCpp -Raw) -match 'generated/default/')) {
+    $outDir = 'generated/default'
+}
+
 (Get-Content -LiteralPath $manifest -Raw) `
-    -replace 'REPLACE_WITH_YOUR_DUMP_ROOT', $dump |
+    -replace 'REPLACE_WITH_YOUR_DUMP_ROOT', $dump `
+    -replace 'out_directory_path = "generated"', "out_directory_path = `"$outDir`"" |
     Set-Content -LiteralPath $projManifest -Encoding UTF8
 
 $argv = @('codegen', $projManifest)
 if ($Force) { $argv = @('--force') + $argv }
 
 Write-Output "dump    : $dump"
+Write-Output "output  : $outDir"
 Write-Output "manifest: $projManifest"
 Write-Output "rexglue $($argv -join ' ')"
 & $ReXGlue @argv

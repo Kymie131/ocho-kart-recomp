@@ -1,4 +1,4 @@
-# Directed peel (closed loop): each round runs codegen+build+boot, reads the new
+﻿# Directed peel (closed loop): each round runs codegen+build+boot, reads the new
 # crash address from the fresh boot log, adds it to the manifest, and repeats.
 # Only adds addresses the runtime actually called -> no false positives.
 #
@@ -15,7 +15,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $manifest = "$repoRoot\tools\config\ocho_kart_manifest.toml"
 
 function Get-RegisteredAddrs {
-    $reg = Get-ChildItem -LiteralPath "$ProjectDir\generated" -Filter 'ocho_kart_register.cpp' -ErrorAction SilentlyContinue
+    $reg = Get-ChildItem -LiteralPath "$ProjectDir\generated" -Filter 'ocho_kart_register.cpp' -Recurse -ErrorAction SilentlyContinue
     if (-not $reg) { return @() }
     $addrs = Select-String -LiteralPath $reg.FullName -Pattern 'SetFunction\(0x([0-9A-Fa-f]+)' -AllMatches |
         ForEach-Object { $_.Matches } | ForEach-Object { [Convert]::ToUInt32($_.Groups[1].Value, 16) }

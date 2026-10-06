@@ -1,4 +1,4 @@
-# Build the recompiled game (Phase 3).
+﻿# Build the recompiled game (Phase 3).
 # Requires: VS Build Tools (MSVC headers), LLVM/clang, Ninja, CMake, and the
 # prebuilt ReXGlue SDK. Generated C++ lives in the analysis project.
 
@@ -18,8 +18,9 @@ if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "project not found: $Proj
 
 $sdkFwd = ($SdkDir -replace '\\','/')
 $genDir = Join-Path $ProjectDir 'generated'
-if (-not (Test-Path -LiteralPath (Join-Path $genDir 'sources.cmake'))) {
-    throw "generated/sources.cmake missing - run tools/run-codegen.ps1 first"
+if (-not (Test-Path -LiteralPath (Join-Path $genDir 'sources.cmake')) -and
+    -not (Test-Path -LiteralPath (Join-Path $genDir 'default\sources.cmake'))) {
+    throw "generated sources.cmake missing - run tools/run-codegen.ps1 first"
 }
 
 $compilerArgs = if ($Toolchain -eq 'msvc') {
