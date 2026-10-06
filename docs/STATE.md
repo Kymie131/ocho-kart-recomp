@@ -80,6 +80,33 @@ against the dump as stated, and each needs one measured run on the real build.
 6. Docs restructured: this file is current-state only; the audio facts are in
    `docs/audio-restart.md`; the history is archived.
 
+## First traced run on the patched build (2026-10-06, 13:56, Windows, Quadro T2000)
+
+Built from scratch with `tools/setup-and-test.ps1` (SDK + 611 generated files),
+booted, intro movies, menu, one race on `PistaCiudad_Circuito0`, closed after
+~3.5 min. Log: `run-trace-20261006-135620.log` (172 lines, `-Trace`).
+
+- **The menu music the user heard is the host-side player**
+  (`host_music: playing 'menu.wav'`), not the game. In the race there were no
+  voices, engine or ambience: **guest audio is still silent.**
+- **No `.fsbcache` and no `<hash>.xxx` bank was ever requested** — not even a
+  failed open — although `FMODAudio.xxx`, `ChavoKartGame.xxx` (the FMOD project),
+  the kart packages and `PistaCiudad_Circuito0_Sonidos.xxx` all loaded fine.
+  FMOD never asks for a bank, so this is upstream of the VFS.
+- **`ObCreateSymbolicLink` was never called** and nothing was written under
+  `xbox_cache`: the title did not use the utility/cache partition in this run,
+  so the `cache:` mount is not what blocks audio here.
+- **`KeInsertQueueDpc` was never called**: the D3D DPC path is not used either.
+- No `FATAL`, no unregistered-function trap, no crash; `setjmp`/`longjmp`
+  redirection did not break anything.
+- Host music never switched to `race.wav`: its menu/race heuristic watches
+  FMOD's XMA voice array, which stays empty because FMOD plays nothing.
+
+Working hypothesis now: FMOD's EventSystem (or its Xenon output) fails to
+initialise or to load the project under ReXGlue, so no event group ever loads
+its bank. Next: find the FMOD `EventSystem::init` / `load` call sites in the
+XEX and log their return codes.
+
 ## Audio: what the title actually uses (decoded 2026-10-06)
 
 - **FMOD Ex 4.x + FMOD Event + FMOD Music System**, statically linked
