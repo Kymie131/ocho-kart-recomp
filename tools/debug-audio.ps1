@@ -29,14 +29,21 @@ if (-not $CmdFile) { $CmdFile = Join-Path $PSScriptRoot 'debug-audio\audio.lldb'
 
 $env:REX_LAUNCHER_SKIP = 'true'
 
+# PowerShell 5.1 + LLDB mangle `-o` arguments that contain embedded quotes or
+# spaces. The command file lives under the repo path ("Recomvo Kart") which has a
+# space, so source a copy from a space-free location instead.
+$CmdSafe = Join-Path $env:TEMP 'ocho_audio.lldb'
+Copy-Item -LiteralPath $CmdFile -Destination $CmdSafe -Force
+
 Write-Output "exe:      $exe"
 Write-Output "dump:     $Dump"
 Write-Output "cmd file: $CmdFile"
 Write-Output "At the (lldb) prompt type:  run"
 
-# `settings set --` stops lldb from parsing the leading --game_data_root etc.
-# as options to `settings set`; inner quotes group the path with spaces.
+# No embedded quotes and no spaces in any -o payload (the dump path is the
+# space-free junction). `settings set --` stops lldb from parsing the leading
+# --game_data_root etc. as options to `settings set`.
 & $Lldb $exe `
     -o "settings set target.env-vars REX_LAUNCHER_SKIP=true" `
-    -o "settings set -- target.run-args --game_data_root `"$Dump`" --gpu_plugin xenos --user_language 5" `
-    -o "command source `"$CmdFile`""
+    -o "settings set -- target.run-args --game_data_root $Dump --gpu_plugin xenos --user_language 5" `
+    -o "command source $CmdSafe"

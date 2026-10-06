@@ -1,15 +1,23 @@
 # LLDB command file for the El Chavo Kart audio investigation.
 # Sourced by tools/debug-audio.ps1 before `run`.
+# LLDB does not allow inline comments after a command, so keep them on their own lines.
 
 # --- Guest audio engine (FMOD) ---
-breakpoint set -n sub_82B8A128   # device/mixer create (runs)
-breakpoint set -n sub_82B893A0   # voice manager (never runs in menu -> suspect)
-breakpoint set -n sub_82B8B8C0   # voice dispatch
-breakpoint set -n sub_82B8AC20   # per-voice context creator (XMACreateContext)
-breakpoint set -n sub_82B896D8   # play wrapper A
-breakpoint set -n sub_82B89598   # play wrapper B
-breakpoint set -n sub_82B8B448   # engine tick (always runs)
-breakpoint set -n sub_82BB1188   # mixer/audio thread loop (fills 256x6 frames)
+# device/mixer create (runs)
+breakpoint set -n sub_82B8A128
+# voice manager (never runs in menu -> suspect)
+breakpoint set -n sub_82B893A0
+# voice dispatch
+breakpoint set -n sub_82B8B8C0
+# per-voice context creator (XMACreateContext)
+breakpoint set -n sub_82B8AC20
+# play wrappers
+breakpoint set -n sub_82B896D8
+breakpoint set -n sub_82B89598
+# engine tick (always runs)
+breakpoint set -n sub_82B8B448
+# mixer/audio thread loop (fills 256x6 frames)
+breakpoint set -n sub_82BB1188
 
 # --- Guest async workers created right before the banks load in Xenia ---
 breakpoint set -n sub_82BAD4B0
@@ -22,20 +30,18 @@ breakpoint set -n NtCreateFile_entry
 # Workflow to find why the .fsbcache banks are never opened:
 #
 #   1. run
-#   2. When it stops at NtCreateFile_entry, do:  bt
+#   2. When it stops at NtCreateFile_entry, do: bt
 #      The recompiled guest functions appear by name (sub_XXXX); the frame
-#      right below the runtime is the guest file-open wrapper, and above it is
-#      the caller. Note the caller for the FMODAudio.xxx open and for the
-#      (missing) bank opens.
+#      right below the runtime is the guest file-open wrapper, above it the caller.
 #   3. Continue (c) until you see the FMODAudio.xxx path (print the guest
-#      string via the object_attrs->name_ptr argument) or run out.
+#      string via object_attrs->name_ptr) or run out.
 #   4. Set a breakpoint at the guest caller you found and re-run to see why it
 #      is not reached for the banks (or the branch it takes instead).
 #
 # Useful one-liners:
 #   image lookup -n sub_82B893A0        # name -> file:line
 #   register read                        # r3.. args for guest calls
-#   thread list                          # which guest worker is running
-#   bt                                   # guest call stack (host frames)
+#   thread list
+#   bt
 #   breakpoint list / breakpoint disable * / breakpoint delete *
 # ---------------------------------------------------------------------------
