@@ -67,7 +67,7 @@ if (-not $NoMusic) {
     }
 }
 if ($Trace) {
-    $extra += '--kernel_trace_dpcs=true', '--trace_file_opens=true', '--xma_trace_writes=true'
+    $extra += '--kernel_trace_dpcs=true', '--trace_file_opens=true', '--xma_trace_writes=true', '--fmod_diag=true'
 }
 $extra += $ExtraArgs
 

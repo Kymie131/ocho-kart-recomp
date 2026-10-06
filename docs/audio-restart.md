@@ -25,6 +25,28 @@ viejas sin evidencia nueva medible.**
   `UFMODLoadingSet::execLoad` / `UFMODMusicSystem::execPromptCue` y ver si se
   crean los hilos de FMOD.
 
+## Ruta FMOD del título (RE estático, 2026-10-06)
+
+Direcciones del XEX descifrado; todas se instrumentan en `src/diag/fmod_diag.cpp`
+(cvar `fmod_diag`, lo activa `run-game.ps1 -Trace`; líneas `FMODDIAG` en el log).
+
+| Dirección | Qué es |
+|---|---|
+| `0x82A2D890` | `UFMODAudioDevice::Init` (llama a `0x82A2D6A0`) |
+| `0x82A2D6A0` | `EventSystem_Create(&g_EventSystem)` → `getSystemObject` → `getVersion >= 0x44415` → `setFileSystem` (callbacks `0x82A2D330/5F0/618/658`) → `EventSystem::init(1024, 0x82)` (reintenta si 0x33) → `getSoundGroup("music")` → idioma (`Portugues`, …) |
+| `0x83CE3694` | `FMOD::EventSystem*` global; `0x82A2CF28` (FinishDestroy) lo libera |
+| `0x82A2BF80` | `UFMODProject::PostLoad`: exige `GEngine->Client->GetAudioDevice() != 0` y `*0x83CE3698 == 0`; luego `setMediaPath` (`0x82F9A4D0`) y `EventSystem::load` (`0x82F9A7B0`, **resultado no comprobado**) |
+| `0x82A2D330` | callback de apertura de FMOD: busca el `UFMODSoundBank` por nombre; si no está registrado devuelve error (no hay fallback a disco) |
+| `0x82A2C7F8` | `UFMODSoundBank::Serialize` |
+| `0x82A387E0` | `UFMODLoadingSet::LoadInternal` → `EventProject->loadSampleData(...)` |
+| `0x82A35530` / `0x82A35E30` | `execPromptCue` (música) / `UFMODEventComponent::execPlay` |
+| `0x82A23A48` | helper de error FMOD (`r3`=resultado, `r4`=expresión, `r6`=archivo, `r7`=línea) |
+| `0x8232EED8` | logger de checks/asserts de UE3 (expr, archivo, línea, fmt) |
+
+Hipótesis a medir con una corrida `-Trace`: o `PostLoad` corre antes de que exista
+el audio device (y el proyecto FEV nunca se carga), o `EventSystem::load` falla, o
+los `UFMODSoundBank` nunca se registran y el callback de apertura rechaza el banco.
+
 ## Hechos medidos (conservar)
 
 ### Runtime host (funciona)

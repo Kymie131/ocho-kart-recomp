@@ -199,6 +199,8 @@ if (-not $NoRun) {
     $lines | Select-String -Pattern "FILEOPEN.*cache" | Select-Object -First 30 | ForEach-Object { $summary.Add("  $($_.Line.Trim())") }
     $summary.Add("Sound bank / FMOD opens (.fsbcache, FMODAudio):")
     $lines | Select-String -Pattern 'FILEOPEN.*(fsbcache|FMOD)' | Select-Object -First 40 | ForEach-Object { $summary.Add("  $($_.Line.Trim())") }
+    $summary.Add("FMOD diagnostics (FMODDIAG, first 120):")
+    $lines | Select-String -SimpleMatch 'FMODDIAG' | Select-Object -First 120 | ForEach-Object { $summary.Add("  $($_.Line.Trim())") }
     $summary.Add("XMA writes logged: $(& $count 'XMA')")
     $summary.Add("FATAL / invalid function lines:")
     $lines | Select-String -Pattern 'FATAL|invalid or unregistered' | Select-Object -First 20 | ForEach-Object { $summary.Add("  $($_.Line.Trim())") }

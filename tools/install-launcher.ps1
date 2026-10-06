@@ -53,3 +53,25 @@ if (Test-Path -LiteralPath $cml) {
         }
     }
 }
+
+# Diagnostic hooks (strong overrides of generated guest functions). Pass-through
+# unless the game runs with --fmod_diag=true (run-game.ps1 -Trace does).
+$diagSrc = Join-Path $repoRoot 'src\diag\fmod_diag.cpp'
+if (Test-Path -LiteralPath $diagSrc) {
+    $diagDir = Join-Path $ProjectDir 'src\diag'
+    New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+    Copy-Item -LiteralPath $diagSrc -Destination (Join-Path $diagDir 'fmod_diag.cpp') -Force
+    Write-Output "fmod diagnostics deployed: $diagDir\fmod_diag.cpp"
+    if (Test-Path -LiteralPath $cml) {
+        $text = Get-Content -LiteralPath $cml -Raw
+        if ($text -notmatch 'src/diag/fmod_diag\.cpp') {
+            $new = ([regex]'(?m)^([ \t]*)src/main\.cpp[ \t]*(\r?)$').Replace($text, "`$1src/main.cpp`$2`n`$1src/diag/fmod_diag.cpp`$2", 1)
+            if ($new -ne $text) {
+                Set-Content -LiteralPath $cml -Value $new -Encoding UTF8 -NoNewline
+                Write-Output "CMakeLists.txt: added src/diag/fmod_diag.cpp"
+            } else {
+                Write-Warning "CMakeLists.txt: could not find 'src/main.cpp' in the sources list; add src/diag/fmod_diag.cpp by hand"
+            }
+        }
+    }
+}
