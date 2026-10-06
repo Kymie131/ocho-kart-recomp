@@ -7,11 +7,11 @@ Unaffiliated with Microsoft, Xbox, Epic, Efecto Studios, Televisa, or Grupo Ches
 ## Status
 
 The game boots past the intro with the Xenos GPU plugin and is playable (input
-stable; effects that reach the guest XMA path are audible). Two upstream-scale
-gaps remain: the title's own UE3/FMOD audio activation never fires (the guest
-mixer hands the runtime silence, so menu/race music is silent), and the Bink
-cinematics have no in-runtime decoder. A host-side music player covers the
-former from the user's own dump.
+stable; the intro cinematics play through the game's own Bink code). The main
+gap is guest audio: the title's statically linked FMOD never opens a sound bank
+under ReXGlue, so menu/race music is silent; a host-side music player covers it
+from the user's own dump. The SDK carries local kernel fixes (DPC dispatch, a
+writable `cache:` partition, an input lock) applied from `patches/`.
 
 Build and run steps: `docs/BUILD.md`. Current state and open issues:
 `docs/STATE.md`.
@@ -20,9 +20,9 @@ Build and run steps: `docs/BUILD.md`. Current state and open issues:
 
 ```
 docs/          notes, roadmap, build guide, package catalog, signed import table
-external/      rexglue-sdk submodule (carries local shim patches)
+external/      rexglue-sdk submodule (patched from patches/ by tools/apply-sdk-patches.ps1)
 src/           launcher + host-side audio (grows per phase)
-tools/         codegen/build/run scripts, FSB5 audio tools, UE3 catalog
+tools/         codegen/build/run scripts, SDK build, FSB5 audio tools, UE3 catalog
 patches/       SDK patches applied to the vendored submodule
 scripts/       env setup, asset-blocking git hook
 tests/
@@ -38,6 +38,9 @@ tests/
 | `docs/reversing-notes.md` | Dump/asset RE findings |
 | `docs/ue3-catalog.md` | Package catalog (names/counts only) |
 | `docs/audio-restart.md` | Audio work log and facts |
+| `docs/kernel-shims.md` | Local SDK changes and stubs this title reaches |
+| `docs/prior-art.md` | Every other Xbox 360 static port and what Ocho Kart took from them |
+| `docs/history/` | Archived session logs |
 
 ## Credits
 

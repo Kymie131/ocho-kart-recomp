@@ -2003,3 +2003,192 @@ index a84b5f5..16673d7 100644
    context.sample_rate = context_init->sample_rate;
  
    context.loop_start = context_init->loop_data.loop_start;
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_ob.cpp b/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
+index 5709e6d..e3fab37 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
+@@ -181,6 +181,18 @@ u32 ObCreateSymbolicLink_entry(ppc_ptr_t<X_ANSI_STRING> path_ptr,
+     path = path.substr(4);  // Strip the full qualifier
+   }
+ 
++  if (rex::string::utf8_starts_with(path, u8"\\System??\\")) {
++    path = path.substr(10);  // Strip the full qualifier
++  }
++
++  // Keep a link that is already registered (e.g. the runtime's writable
++  // cache: mount) instead of letting the title repoint it; Xenia Canary does
++  // the same and 4D5307DC expects success here.
++  std::string existing_target;
++  if (REX_KERNEL_FS()->FindSymbolicLink(path, existing_target)) {
++    return X_STATUS_SUCCESS;
++  }
++
+   if (!REX_KERNEL_FS()->RegisterSymbolicLink(path, target)) {
+     return X_STATUS_UNSUCCESSFUL;
+   }
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_threading.cpp b/src/kernel/xboxkrnl/xboxkrnl_threading.cpp
+index 57fd161..32281a8 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_threading.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_threading.cpp
+@@ -19,6 +19,7 @@
+ #include <vector>
+ 
+ #include <rex/chrono/clock.h>
++#include <rex/cvar.h>
+ #include <rex/dbg.h>
+ #include <rex/kernel/xboxkrnl/private.h>
+ #include <rex/kernel/xboxkrnl/threading.h>
+@@ -39,6 +40,12 @@
+ #include <rex/thread/atomic.h>
+ #include <rex/thread/mutex.h>
+ 
++REXCVAR_DEFINE_BOOL(kernel_dispatch_dpcs, true, "Kernel",
++                    "Run KeInsertQueueDpc routines inline (Xenia Canary behaviour). false = "
++                    "upstream v0.10.0 behaviour (queued, never run).");
++REXCVAR_DEFINE_BOOL(kernel_trace_dpcs, false, "Kernel",
++                    "Log every KeInsertQueueDpc (routine, context, args).");
++
+ namespace rex::kernel::xboxkrnl {
+ using namespace rex::system;
+ using rex::runtime::current_ppc_context;
+@@ -1176,25 +1183,75 @@ void KeInitializeDpc_entry(ppc_ptr_t<XDPC> dpc, mapped_void routine, mapped_void
+ }
+ 
+ u32 KeInsertQueueDpc_entry(ppc_ptr_t<XDPC> dpc, u32 arg1, u32 arg2) {
+-  assert_always("DPC does not dispatch yet; going to hang!");
+-
++  // Upstream v0.10.0 queued the DPC on dpc_list and never drained it, so every
++  // DPC-driven signal was lost (the "going to hang" assert compiles out in
++  // Release). Like Xenia Canary, run the routine inline on the calling guest
++  // thread at DISPATCH_LEVEL. Real hardware dequeues the DPC before calling
++  // its routine, so the entry is never left on the list here.
+   uint32_t list_entry_ptr = dpc.guest_address() + 4;
++  uint32_t routine = 0;
++  {
++    auto global_lock = rex::thread::global_critical_region::AcquireDirect();
++    auto dpc_list = REX_KERNEL_STATE()->dpc_list();
+ 
+-  // Lock dispatcher.
+-  auto global_lock = rex::thread::global_critical_region::AcquireDirect();
+-  auto dpc_list = REX_KERNEL_STATE()->dpc_list();
++    // If already in a queue (legacy queued mode), abort like the kernel does.
++    if (dpc_list->IsQueued(list_entry_ptr)) {
++      return 0;
++    }
+ 
+-  // If already in a queue, abort.
+-  if (dpc_list->IsQueued(list_entry_ptr)) {
+-    return 0;
++    dpc->arg1 = (uint32_t)arg1;
++    dpc->arg2 = (uint32_t)arg2;
++
++    if (!REXCVAR_GET(kernel_dispatch_dpcs)) {
++      dpc_list->Insert(list_entry_ptr);
++      return 1;
++    }
++    routine = dpc->routine;
+   }
+ 
+-  // Prep DPC.
+-  dpc->arg1 = (uint32_t)arg1;
+-  dpc->arg2 = (uint32_t)arg2;
++  if (REXCVAR_GET(kernel_trace_dpcs)) {
++    REXKRNL_INFO("KeInsertQueueDpc dpc={:08X} routine={:08X} context={:08X} arg1={:08X} "
++                 "arg2={:08X}",
++                 dpc.guest_address(), routine, (uint32_t)dpc->context, (uint32_t)arg1,
++                 (uint32_t)arg2);
++  }
++  if (!routine) {
++    return 1;
++  }
+ 
+-  dpc_list->Insert(list_entry_ptr);
++  auto* thread = XThread::GetCurrentThread();
++  if (!thread) {
++    REXKRNL_WARN("KeInsertQueueDpc({:08X}): no guest thread; DPC {:08X} dropped",
++                 dpc.guest_address(), routine);
++    return 1;
++  }
++  auto* dispatcher = REX_KERNEL_STATE()->function_dispatcher();
++  if (!dispatcher->GetFunction(routine)) {
++    // Reached only through a pointer: add it to [entrypoint.functions].
++    REXKRNL_ERROR("KeInsertQueueDpc: DPC routine {:08X} is not a registered function; add it "
++                  "to the manifest",
++                  routine);
++    return 1;
++  }
+ 
++  auto* ctx = thread->thread_state()->context();
++  auto pcr =
++      REX_KERNEL_MEMORY()->TranslateVirtual<X_KPCR*>(static_cast<uint32_t>(ctx->r13.u64));
++  // Re-entrant insert from inside a DPC routine: already at DISPATCH_LEVEL.
++  bool already_in_dpc = pcr->prcb_data.dpc_active != 0;
++  DPCImpersonationScope scope{};
++  if (!already_in_dpc) {
++    scope = REX_KERNEL_STATE()->BeginDPCImpersonation();
++  }
++  uint64_t args[] = {dpc.guest_address(), (uint64_t)(uint32_t)dpc->context,
++                     (uint64_t)(uint32_t)arg1, (uint64_t)(uint32_t)arg2};
++  // ExecuteTrap restores the caller's full register state afterwards: the
++  // routine runs "between" two guest instructions like a real DPC, so the
++  // import's caller sees nothing but the return value.
++  dispatcher->ExecuteTrap(thread->thread_state(), routine, args, rex::countof(args));
++  if (!already_in_dpc) {
++    REX_KERNEL_STATE()->EndDPCImpersonation(scope);
++  }
+   return 1;
+ }
+ 
+diff --git a/src/system/runtime.cpp b/src/system/runtime.cpp
+index c10694c..4eeee96 100644
+--- a/src/system/runtime.cpp
++++ b/src/system/runtime.cpp
+@@ -33,6 +33,10 @@ REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
+ REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
+ REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
+ REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
++REXCVAR_DEFINE_BOOL(mount_cache, true, "Runtime",
++                    "Mount writable cache:, cache0: and cache1: (HDD utility partition) under "
++                    "<user_data_root>/xbox_cache, like Xenia Canary. false = upstream v0.10.0 "
++                    "(cache: unmounted).");
+ 
+ namespace rex {
+ 
+@@ -350,9 +354,34 @@ bool Runtime::SetupVfs() {
+     REXSYS_DEBUG("  Registered NullDevice for \\Device\\Harddisk0\\{{Partition0,Cache0,Cache1}}");
+   }
+ 
+-  // NOTE: Do NOT register a device for cache: paths
+-  // Games handle "device not found" gracefully but don't handle actual device
+-  // errors (like NAME_COLLISION) well. Let cache: fail cleanly.
++  // HDD utility ("cache") partition. Upstream v0.10.0 left cache: unmounted,
++  // which makes titles that mount their own cache: through XMountUtilityDrive
++  // (StfsCreateDevice + ObCreateSymbolicLink) land on the NullDevice above:
++  // every write "succeeds" and every read returns nothing. Xenia Canary mounts
++  // writable host folders here by default (cvar mount_cache) and keeps them
++  // when the title later links cache: itself (see ObCreateSymbolicLink).
++  if (REXCVAR_GET(mount_cache)) {
++    auto cache_base = std::filesystem::absolute(user_data_root_) / "xbox_cache";
++    // Register cache0/cache1 before cache: so prefix resolution picks them first.
++    const struct {
++      const char* device;
++      const char* folder;
++      const char* link;
++    } kCacheMounts[] = {{"\\CACHE0", "cache0", "cache0:"},
++                        {"\\CACHE1", "cache1", "cache1:"},
++                        {"\\CACHE", "cache", "cache:"}};
++    for (const auto& m : kCacheMounts) {
++      auto cache_device =
++          std::make_unique<rex::filesystem::HostPathDevice>(m.device, cache_base / m.folder, false);
++      if (!cache_device->Initialize() || !file_system_->RegisterDevice(std::move(cache_device))) {
++        REXSYS_WARN("Runtime::SetupVfs: unable to mount {} at {}", m.link,
++                    (cache_base / m.folder).string());
++        continue;
++      }
++      file_system_->RegisterSymbolicLink(m.link, m.device);
++      REXSYS_DEBUG("  Mounted {} at {}", (cache_base / m.folder).string(), m.link);
++    }
++  }
+ 
+   return true;
+ }

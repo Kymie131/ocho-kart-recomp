@@ -19,3 +19,31 @@ jobs:
         run: cmake --build build --config Release
       - name: Smoke test
         run: ./build/ocho_kart_recomp
+  tooling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the SDK submodule and libmspack only
+        run: |
+          git submodule update --init --depth 1 external/rexglue-sdk
+          git -C external/rexglue-sdk submodule update --init --depth 1 thirdparty/libmspack
+      - name: SDK patches apply to the pinned submodule
+        run: |
+          for p in patches/*.patch; do
+            git -C external/rexglue-sdk apply --check "../../$p"
+            echo "ok: $p"
+          done
+      - name: Manifest is valid TOML
+        run: |
+          python3 - <<'PY'
+          import tomllib
+          d = tomllib.loads(open("tools/config/ocho_kart_manifest.toml", encoding="utf-8-sig").read())
+          e = d["entrypoint"]
+          assert "setjmp_address" in e and "longjmp_address" in e
+          print("functions:", len(e["functions"]))
+          PY
+      - name: Catalog tool and LZX helper build
+        run: |
+          python3 -m py_compile tools/catalog/ue3_catalog.py
+          sh tools/catalog/build.sh
+          python3 tools/catalog/ue3_catalog.py --help > /dev/null

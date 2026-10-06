@@ -1,4 +1,4 @@
-﻿diff --git a/src/audio/xma_decoder.cpp b/src/audio/xma_decoder.cpp
+diff --git a/src/audio/xma_decoder.cpp b/src/audio/xma_decoder.cpp
 index a0a178d..f1f35e9 100644
 --- a/src/audio/xma_decoder.cpp
 +++ b/src/audio/xma_decoder.cpp

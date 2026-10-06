@@ -1,0 +1,113 @@
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_threading.cpp b/src/kernel/xboxkrnl/xboxkrnl_threading.cpp
+index 57fd161..32281a8 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_threading.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_threading.cpp
+@@ -19,6 +19,7 @@
+ #include <vector>
+ 
+ #include <rex/chrono/clock.h>
++#include <rex/cvar.h>
+ #include <rex/dbg.h>
+ #include <rex/kernel/xboxkrnl/private.h>
+ #include <rex/kernel/xboxkrnl/threading.h>
+@@ -39,6 +40,12 @@
+ #include <rex/thread/atomic.h>
+ #include <rex/thread/mutex.h>
+ 
++REXCVAR_DEFINE_BOOL(kernel_dispatch_dpcs, true, "Kernel",
++                    "Run KeInsertQueueDpc routines inline (Xenia Canary behaviour). false = "
++                    "upstream v0.10.0 behaviour (queued, never run).");
++REXCVAR_DEFINE_BOOL(kernel_trace_dpcs, false, "Kernel",
++                    "Log every KeInsertQueueDpc (routine, context, args).");
++
+ namespace rex::kernel::xboxkrnl {
+ using namespace rex::system;
+ using rex::runtime::current_ppc_context;
+@@ -1176,25 +1183,75 @@ void KeInitializeDpc_entry(ppc_ptr_t<XDPC> dpc, mapped_void routine, mapped_void
+ }
+ 
+ u32 KeInsertQueueDpc_entry(ppc_ptr_t<XDPC> dpc, u32 arg1, u32 arg2) {
+-  assert_always("DPC does not dispatch yet; going to hang!");
+-
++  // Upstream v0.10.0 queued the DPC on dpc_list and never drained it, so every
++  // DPC-driven signal was lost (the "going to hang" assert compiles out in
++  // Release). Like Xenia Canary, run the routine inline on the calling guest
++  // thread at DISPATCH_LEVEL. Real hardware dequeues the DPC before calling
++  // its routine, so the entry is never left on the list here.
+   uint32_t list_entry_ptr = dpc.guest_address() + 4;
++  uint32_t routine = 0;
++  {
++    auto global_lock = rex::thread::global_critical_region::AcquireDirect();
++    auto dpc_list = REX_KERNEL_STATE()->dpc_list();
+ 
+-  // Lock dispatcher.
+-  auto global_lock = rex::thread::global_critical_region::AcquireDirect();
+-  auto dpc_list = REX_KERNEL_STATE()->dpc_list();
++    // If already in a queue (legacy queued mode), abort like the kernel does.
++    if (dpc_list->IsQueued(list_entry_ptr)) {
++      return 0;
++    }
+ 
+-  // If already in a queue, abort.
+-  if (dpc_list->IsQueued(list_entry_ptr)) {
+-    return 0;
++    dpc->arg1 = (uint32_t)arg1;
++    dpc->arg2 = (uint32_t)arg2;
++
++    if (!REXCVAR_GET(kernel_dispatch_dpcs)) {
++      dpc_list->Insert(list_entry_ptr);
++      return 1;
++    }
++    routine = dpc->routine;
+   }
+ 
+-  // Prep DPC.
+-  dpc->arg1 = (uint32_t)arg1;
+-  dpc->arg2 = (uint32_t)arg2;
++  if (REXCVAR_GET(kernel_trace_dpcs)) {
++    REXKRNL_INFO("KeInsertQueueDpc dpc={:08X} routine={:08X} context={:08X} arg1={:08X} "
++                 "arg2={:08X}",
++                 dpc.guest_address(), routine, (uint32_t)dpc->context, (uint32_t)arg1,
++                 (uint32_t)arg2);
++  }
++  if (!routine) {
++    return 1;
++  }
+ 
+-  dpc_list->Insert(list_entry_ptr);
++  auto* thread = XThread::GetCurrentThread();
++  if (!thread) {
++    REXKRNL_WARN("KeInsertQueueDpc({:08X}): no guest thread; DPC {:08X} dropped",
++                 dpc.guest_address(), routine);
++    return 1;
++  }
++  auto* dispatcher = REX_KERNEL_STATE()->function_dispatcher();
++  if (!dispatcher->GetFunction(routine)) {
++    // Reached only through a pointer: add it to [entrypoint.functions].
++    REXKRNL_ERROR("KeInsertQueueDpc: DPC routine {:08X} is not a registered function; add it "
++                  "to the manifest",
++                  routine);
++    return 1;
++  }
+ 
++  auto* ctx = thread->thread_state()->context();
++  auto pcr =
++      REX_KERNEL_MEMORY()->TranslateVirtual<X_KPCR*>(static_cast<uint32_t>(ctx->r13.u64));
++  // Re-entrant insert from inside a DPC routine: already at DISPATCH_LEVEL.
++  bool already_in_dpc = pcr->prcb_data.dpc_active != 0;
++  DPCImpersonationScope scope{};
++  if (!already_in_dpc) {
++    scope = REX_KERNEL_STATE()->BeginDPCImpersonation();
++  }
++  uint64_t args[] = {dpc.guest_address(), (uint64_t)(uint32_t)dpc->context,
++                     (uint64_t)(uint32_t)arg1, (uint64_t)(uint32_t)arg2};
++  // ExecuteTrap restores the caller's full register state afterwards: the
++  // routine runs "between" two guest instructions like a real DPC, so the
++  // import's caller sees nothing but the return value.
++  dispatcher->ExecuteTrap(thread->thread_state(), routine, args, rex::countof(args));
++  if (!already_in_dpc) {
++    REX_KERNEL_STATE()->EndDPCImpersonation(scope);
++  }
+   return 1;
+ }
+ 

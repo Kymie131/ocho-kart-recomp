@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- SDK: `KeInsertQueueDpc` now runs DPC routines (`kernel_dispatch_dpcs`); the
+  title's D3D DPC routine `0x82B63818` is registered in the manifest.
+- SDK: writable `cache:`/`cache0:`/`cache1:` (`mount_cache`);
+  `ObCreateSymbolicLink` keeps existing links.
+- Codegen: `setjmp`/`longjmp` redirected (`0x830BDFB0` / `0x830BDC90`).
+- Catalog: packages are LZX (not LZO); `tools/catalog/ue3lzx.c` helper and a
+  rewritten `ue3_catalog.py` decode names, imports, exports and classes.
+- Audio diagnosis: the title's audio is FMOD Ex + FMOD Event/Music; menu music
+  is an FMOD music cue started by Kismet in `TitleMap`.
+- Tooling: `tools/apply-sdk-patches.ps1`, `tools/build-sdk.ps1`.
+- Docs: `STATE.md` rewritten as current state with a corrections table; old log
+  archived in `docs/history/`; `docs/prior-art.md` (all other Xbox 360 ports).
+
 - Boots past the intro with the Xenos GPU plugin; playable with stable input.
 - Launcher: language, controller icons, video options and a host-music toggle.
 - Host-side music: `tools/host-music.ps1` extracts the dump's own FSB music to

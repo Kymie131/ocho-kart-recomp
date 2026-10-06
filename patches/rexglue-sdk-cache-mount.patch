@@ -1,0 +1,76 @@
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_ob.cpp b/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
+index 5709e6d..e3fab37 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
+@@ -181,6 +181,18 @@ u32 ObCreateSymbolicLink_entry(ppc_ptr_t<X_ANSI_STRING> path_ptr,
+     path = path.substr(4);  // Strip the full qualifier
+   }
+ 
++  if (rex::string::utf8_starts_with(path, u8"\\System??\\")) {
++    path = path.substr(10);  // Strip the full qualifier
++  }
++
++  // Keep a link that is already registered (e.g. the runtime's writable
++  // cache: mount) instead of letting the title repoint it; Xenia Canary does
++  // the same and 4D5307DC expects success here.
++  std::string existing_target;
++  if (REX_KERNEL_FS()->FindSymbolicLink(path, existing_target)) {
++    return X_STATUS_SUCCESS;
++  }
++
+   if (!REX_KERNEL_FS()->RegisterSymbolicLink(path, target)) {
+     return X_STATUS_UNSUCCESSFUL;
+   }
+diff --git a/src/system/runtime.cpp b/src/system/runtime.cpp
+index c10694c..4eeee96 100644
+--- a/src/system/runtime.cpp
++++ b/src/system/runtime.cpp
+@@ -33,6 +33,10 @@ REXCVAR_DEFINE_STRING(user_data_root, "", "Runtime", "Override user data path");
+ REXCVAR_DEFINE_STRING(update_data_root, "", "Runtime", "Override update data path");
+ REXCVAR_DEFINE_STRING(cache_root, "", "Runtime", "Override shader cache path");
+ REXCVAR_DEFINE_STRING(metadata_root, "", "Runtime", "Override metadata path");
++REXCVAR_DEFINE_BOOL(mount_cache, true, "Runtime",
++                    "Mount writable cache:, cache0: and cache1: (HDD utility partition) under "
++                    "<user_data_root>/xbox_cache, like Xenia Canary. false = upstream v0.10.0 "
++                    "(cache: unmounted).");
+ 
+ namespace rex {
+ 
+@@ -350,9 +354,34 @@ bool Runtime::SetupVfs() {
+     REXSYS_DEBUG("  Registered NullDevice for \\Device\\Harddisk0\\{{Partition0,Cache0,Cache1}}");
+   }
+ 
+-  // NOTE: Do NOT register a device for cache: paths
+-  // Games handle "device not found" gracefully but don't handle actual device
+-  // errors (like NAME_COLLISION) well. Let cache: fail cleanly.
++  // HDD utility ("cache") partition. Upstream v0.10.0 left cache: unmounted,
++  // which makes titles that mount their own cache: through XMountUtilityDrive
++  // (StfsCreateDevice + ObCreateSymbolicLink) land on the NullDevice above:
++  // every write "succeeds" and every read returns nothing. Xenia Canary mounts
++  // writable host folders here by default (cvar mount_cache) and keeps them
++  // when the title later links cache: itself (see ObCreateSymbolicLink).
++  if (REXCVAR_GET(mount_cache)) {
++    auto cache_base = std::filesystem::absolute(user_data_root_) / "xbox_cache";
++    // Register cache0/cache1 before cache: so prefix resolution picks them first.
++    const struct {
++      const char* device;
++      const char* folder;
++      const char* link;
++    } kCacheMounts[] = {{"\\CACHE0", "cache0", "cache0:"},
++                        {"\\CACHE1", "cache1", "cache1:"},
++                        {"\\CACHE", "cache", "cache:"}};
++    for (const auto& m : kCacheMounts) {
++      auto cache_device =
++          std::make_unique<rex::filesystem::HostPathDevice>(m.device, cache_base / m.folder, false);
++      if (!cache_device->Initialize() || !file_system_->RegisterDevice(std::move(cache_device))) {
++        REXSYS_WARN("Runtime::SetupVfs: unable to mount {} at {}", m.link,
++                    (cache_base / m.folder).string());
++        continue;
++      }
++      file_system_->RegisterSymbolicLink(m.link, m.device);
++      REXSYS_DEBUG("  Mounted {} at {}", (cache_base / m.folder).string(), m.link);
++    }
++  }
+ 
+   return true;
+ }

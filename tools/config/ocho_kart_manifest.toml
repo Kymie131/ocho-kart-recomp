@@ -20,6 +20,19 @@ file_path = "REPLACE_WITH_YOUR_DUMP_ROOT/default.xex"
 out_directory_path = "generated"
 includes = []
 
+# setjmp/longjmp: redirected to native implementations by the recompiler.
+# A recompiled longjmp cannot restore the host stack, so without these the
+# title's setjmp users (7 call sites; longjmp: 18 direct calls, 21 sites in the
+# generated code counting tail branches) break on the first longjmp.
+# Found 2026-10-06 in the decrypted image (default.xex SHA1 EB3B307A...):
+#   longjmp 0x830BDC90: restores f14-f31 from 0x00(r3), r13-r31 from 0x98(r3),
+#     v64-v127 from 0x140(r3), LR 0x134, r1 0x90, CR 0x130; the far path
+#     calls RtlUnwind (only direct RtlUnwind caller besides the SEH helper).
+#   setjmp  0x830BDFB0: mirror store sequence (no .pdata entry, leaf; sits
+#     right after longjmp as in other MSVC/360 CRTs).
+longjmp_address = 0x830BDC90
+setjmp_address = 0x830BDFB0
+
 # Non-import call targets seen by ReXGlue (vtable thunks / stubs in .text).
 # Real imports (307, IAT 0x82000600-0x82000ACC) are resolved by the ExportResolver,
 # not here. Full table: docs/toolchain/xex-imports-signed.md.
@@ -53,6 +66,14 @@ includes = []
 0x83243268 = { name = "sub_83243268_thunk", size = 12 }
 0x82928C08 = { name = "sub_82928C08_method", size = 20 }
 0x82B186B8 = { name = "sub_82B186B8_thunk", size = 24 }
+
+# DPC routine of the D3D static library (registered by KeInitializeDpc at
+# 0x82B639BC, queued by KeInsertQueueDpc at 0x82B577A0). It has no .pdata entry
+# and is reached only through the DPC object, so codegen never discovers it.
+# Body: store arg1 in the ring at ctx+0x5C, ++count at ctx+0x54, tail-call
+# KeSetEvent(ctx+0x3C). Its waiter (sub_82B63670) uses a 30 ms timeout, so
+# without the DPC the D3D worker only runs on the timeout path.
+0x82B63818 = { name = "d3d_dpc_82B63818_signal", size = 56 }
 
 # short return / stub sequences
 0x82FB2774 = { name = "stub_82FB2774_ret0", size = 8 }

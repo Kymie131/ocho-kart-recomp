@@ -1,8 +1,29 @@
 # Audio — reinicio limpio (2026-10-03)
 
-Documento canónico de audio. Las secciones históricas contradictorias de `STATE.md`
-quedan archivadas en `docs/audio-investigation-archive.md`. **No reabrir teorías viejas
-sin evidencia nueva medible.**
+Documento canónico de audio. El registro histórico de `STATE.md` (con sus
+contradicciones) está archivado en `docs/history/STATE-log-2026-10.md`; el estado
+actual y la tabla de correcciones están en `docs/STATE.md`. **No reabrir teorías
+viejas sin evidencia nueva medible.**
+
+## Qué es el audio de este juego (decodificado 2026-10-06)
+
+- El título usa **FMOD Ex 4.x + FMOD Event + FMOD Music System**, enlazados
+  estáticamente en el XEX (`fmod_output_xenon.cpp`, `fmod_codec_xma.cpp`,
+  `fmod_musicsystemi.cpp`, hilos "FMOD mixer/stream/file/nonblocking thread").
+  El "driver XMA de software del guest" descrito abajo (`sub_82B8…`, el array de
+  320 slots en `0x83C12330`, el registro `0x601`) es el pool de códec XMA y la
+  salida Xenon **de FMOD**.
+- `ChavoKartGame.xxx` contiene `FMODProject CHAVO_KART_FMOD_PROJECT` (datos FEV) y
+  **15** `FMODSoundBank` (uno por cada `<hash>.fsbcache`).
+- La música del menú es un **cue de FMOD Music** (`CHAVO_KART_FMOD_PROJECT_MAIN_THEME`)
+  que dispara **Kismet** (`SeqAct_FMODMusicCueControl_0` en `TitleMap.xxx`); no es
+  XMP ni un `SoundCue` de UE3.
+- Pregunta abierta concreta: **por qué FMOD nunca abre un banco bajo ReXGlue**.
+  Candidatos ya corregidos en el SDK (sin medir todavía): `cache:` sin montar
+  (el título trae el código de caché de utilidad/DVD) y DPCs que nunca corrían
+  (el único DPC resultó ser de D3D). Siguiente paso: breakpoints en los nativos
+  `UFMODLoadingSet::execLoad` / `UFMODMusicSystem::execPromptCue` y ver si se
+  crean los hilos de FMOD.
 
 ## Hechos medidos (conservar)
 
@@ -34,9 +55,10 @@ sin evidencia nueva medible.**
   kickear.
 
 ### Assets de audio del dump
-- 12 bancos `*.fsbcache` en `ChavoKartGame/CookedXbox360/` (magic `FSB5`).
-- Paquete UE3 `FMODAudio.xxx` (solo referencias, 32 KB).
-- Películas Bink en `Movies/*.BIK` (cinemáticas, no mixer de juego).
+- 15 bancos `*.fsbcache` en `ChavoKartGame/CookedXbox360/` (magic `FSB5`).
+- Paquete UE3 `FMODAudio.xxx` (clases de script de la integración; 32 KB LZX).
+- Películas Bink en `Movies/*.BIK` (cinemáticas; las decodifica el Bink
+  enlazado en el XEX, no el mixer de juego).
 - ffmpeg del sistema: demuxer FSB **no implementa FSB5**; **sí** tiene decoders `xma1`/`xma2`.
 
 ## Instrumentación en el runtime (2026-10-03, tarde)
@@ -170,8 +192,8 @@ Evidencia medida:
 - No es shim: ningún `XAudio*` stub se usa (solo `XamVoiceSetMicArrayIdleUsers`).
   No es el perfil ni un mute. No es VFS (no hay opens fallidos de bancos) ni el
   decoder (ya se portó el de Downpour, sin efecto).
-- Conclusión: es la **activación de audio del título** (SoundCue del menú/carrera
-  no se disparan). Arreglarlo es RE del sistema de audio UE3 del juego, no un
+- Conclusión: es la **activación de audio del título** (los bancos FMOD nunca se
+  cargan; ver "Qué es el audio de este juego" arriba: no son SoundCues de UE3). Arreglarlo es RE del sistema de audio UE3 del juego, no un
   parche puntual. Xenia lo activa; ReXGlue no.
 
 Herramienta dejada para esa sesión: `tools/debug-audio.ps1` (LLDB + PDBs del exe

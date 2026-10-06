@@ -1,0 +1,4 @@
+# Patches must stay UTF-8 + LF or `git apply` rejects them
+# (PowerShell `>` redirection writes UTF-16 + CRLF).
+*.patch text eol=lf
+*.sh text eol=lf
