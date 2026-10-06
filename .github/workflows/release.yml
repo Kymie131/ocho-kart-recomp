@@ -1,0 +1,53 @@
+name: release
+
+# Code-only release: packages the tooling, shims and docs. It never contains game
+# content — the recompiled binary is built locally from each user's own dump.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Refuse game assets in the tree
+        run: |
+          if git ls-files | grep -Ei '\.(xex|xxx|upk|tfc|bik|fsbcache|iso|god)$'; then
+            echo "::error::game assets are tracked in git"; exit 1
+          fi
+
+      - name: Build repo scaffolding
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+          ./build/ocho_kart_recomp
+
+      - name: Package code-only bundle
+        run: |
+          mkdir -p dist
+          zip -r "dist/ocho-kart-tooling-${GITHUB_REF_NAME}.zip" \
+            tools patches docs src scripts CMakeLists.txt README.md LICENSE \
+            THIRD_PARTY_NOTICES.md CONTRIBUTING.md CHANGELOG.md \
+            -x '*.xex' '*.xxx' '*.upk' '*.tfc' '*.bik' '*.fsbcache' '*.iso' '*.god' \
+            -x 'tools/out/*' 'external/*'
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/ocho-kart-tooling-${GITHUB_REF_NAME}.zip" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Code-only tooling bundle. You must supply your own legal dump and build the game locally (see docs/BUILD.md). No game content is included." \
+          || gh release upload "${GITHUB_REF_NAME}" \
+            "dist/ocho-kart-tooling-${GITHUB_REF_NAME}.zip" --clobber
