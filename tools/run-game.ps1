@@ -28,12 +28,24 @@ param(
     # Diagnostics for the audio investigation (docs/STATE.md, "Next").
     [switch]$Trace,
     [string[]]$ExtraArgs = @(),
-    [string]$LogFile = ''
+    [string]$LogFile = '',
+    # Where rexgpu-xenos.dll comes from if it is not next to the exe yet.
+    [string]$SdkDir = "$env:ProgramData\rexglue-sdk-ocho"
 )
 
 $ErrorActionPreference = 'Stop'
 $exe = Join-Path $ProjectDir 'out\build\win-amd64\ocho_kart.exe'
 if (-not (Test-Path -LiteralPath $exe)) { throw "not built yet: $exe" }
+$plugin = Join-Path (Split-Path -Parent $exe) 'rexgpu-xenos.dll'
+if (-not (Test-Path -LiteralPath $plugin)) {
+    $src = Join-Path $SdkDir 'bin\rexgpu-xenos.dll'
+    if (Test-Path -LiteralPath $src) {
+        Copy-Item -LiteralPath $src -Destination $plugin
+        Write-Output "staged GPU plugin: $plugin"
+    } else {
+        throw "rexgpu-xenos.dll is missing next to the exe and not found in $SdkDir\bin"
+    }
+}
 if (-not (Test-Path -LiteralPath (Join-Path $DumpPath 'default.xex'))) { throw "default.xex not found under: $DumpPath" }
 
 # The guest mixer is silent upstream; make sure the host music tracks exist so
@@ -64,4 +76,12 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
 Write-Output "launching (GPU plugin xenos, user_language $Language, log $LogLevel). Log: $log"
 Write-Output "Close the game window to stop."
 
-& $exe --game_data_root $DumpPath --gpu_plugin xenos --user_language $Language --log_level $LogLevel --log_file $log @extra
+# ocho_kart.exe is a GUI (WIN32) program: invoked with & PowerShell returns at
+# once instead of waiting, so anything after this line would run while the game
+# is still starting. Start-Process -Wait blocks until the window is closed.
+$argv = @('--game_data_root', $DumpPath, '--gpu_plugin', 'xenos', '--user_language', "$Language",
+          '--log_level', $LogLevel, '--log_file', $log) + $extra
+$quoted = $argv | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }
+$proc = Start-Process -FilePath $exe -ArgumentList ($quoted -join ' ') `
+    -WorkingDirectory (Split-Path -Parent $exe) -Wait -PassThru
+Write-Output ("game exited with code {0}" -f $proc.ExitCode)

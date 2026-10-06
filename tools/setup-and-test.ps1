@@ -182,7 +182,7 @@ if (-not $NoRun) {
     $userData = Join-Path $OutDir 'test-user-data'
     Write-Host 'The game starts now. Get to the main menu, wait ~30 s, start one race if you can,'
     Write-Host 'then close the game window. The summary is written when it closes.'
-    & (Join-Path $tools 'run-game.ps1') -DumpPath $DumpPath -ProjectDir $ProjectDir -Trace -LogLevel info `
+    & (Join-Path $tools 'run-game.ps1') -DumpPath $DumpPath -ProjectDir $ProjectDir -SdkDir $SdkInstallDir -Trace -LogLevel info `
         -LogFile $log -ExtraArgs @("--user_data_root=$userData")
 
     $lines = if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log } else { @() }

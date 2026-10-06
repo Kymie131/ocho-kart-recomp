@@ -1,4 +1,4 @@
-# Deploy the canonical launcher app into the analysis project.
+﻿# Deploy the canonical launcher app into the analysis project.
 # The project should not keep its UI in the repo, so the source of truth lives
 # in src/launcher/ and gets copied into the project before a build. Codegen
 # writes src/<name>_app.h only on first init (RegeneratePolicy::FirstInitOnly),
@@ -31,4 +31,25 @@ if (Test-Path -LiteralPath $hostSrc) {
     New-Item -ItemType Directory -Force -Path $hostDir | Out-Null
     Copy-Item -LiteralPath $hostSrc -Destination $hostDst -Force
     Write-Output "host music deployed: $hostDst"
+}
+
+# The game needs the Xenos GPU plugin (rexgpu-xenos.dll) next to the exe;
+# without it the runtime logs "GPU plugin 'xenos' not found" and exits. A
+# project from `rexglue init` calls rexglue_setup_target(<name>) without
+# plugins, so ask for it here (idempotent).
+$cml = Join-Path $ProjectDir 'CMakeLists.txt'
+if (Test-Path -LiteralPath $cml) {
+    $text = Get-Content -LiteralPath $cml -Raw
+    if ($text -notmatch 'GPU_PLUGINS') {
+        $new = [regex]::Replace($text, 'rexglue_setup_target\(\s*([A-Za-z0-9_]+)\s*\)', 'rexglue_setup_target($1 GPU_PLUGINS xenos)')
+        if ($new -ne $text) {
+            Set-Content -LiteralPath $cml -Value $new -Encoding UTF8 -NoNewline
+            Write-Output "CMakeLists.txt: rexglue_setup_target now stages the xenos GPU plugin"
+            # POST_BUILD steps only run when the exe relinks; force that once.
+            $exe = Join-Path $ProjectDir 'out\build\win-amd64\ocho_kart.exe'
+            if (Test-Path -LiteralPath $exe) { Remove-Item -LiteralPath $exe -Force }
+        } else {
+            Write-Warning "CMakeLists.txt: could not find rexglue_setup_target(...) to add GPU_PLUGINS xenos"
+        }
+    }
 }
