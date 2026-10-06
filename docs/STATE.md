@@ -1,6 +1,242 @@
 ﻿# State
 
-Updated 2026-10-03.
+Updated 2026-10-06.
+
+## Session: tooling, host music, Phase 2 catalog (2026-10-06)
+
+Measured boot→menu file opens with the instrumented runtime (temporary, now
+reverted): the title opens `D:\ChavoKartGame\CookedXbox360\FMODAudio.xxx`
+(success) and never opens any `*.fsbcache`, confirming the earlier diagnosis:
+the blocker is the title's own UE3/FMOD activation, not the VFS. The same trace
+shows the movies that exist on the dump **do** resolve (`INTRO.bik`,
+`LOGO_*.bik`, `DISCLAIMER01.bik` all `result=0x0`); the failed probes are the
+`.xxx`/`.txt`/`_ESM` variants and `VIDEODEMO.bik`, which the dump does not ship.
+So the "movie paths do not resolve" note below is wrong for the current build —
+the VFS maps `D:` correctly and is case-insensitive. Whether the picture shows is
+the separate Bink-decoder question.
+
+What changed this session:
+
+- **Runtime cleanup.** Reverted the temporary instrumentation in the vendored
+  SDK (`xboxkrnl_io.cpp` AUDIOFILE/OPEN/BT, `xboxkrnl_rtl.cpp` ANSISTR,
+  `xboxkrnl_threading.cpp` THREADCREATE/BT). Kept the intentional changes (Input
+  race lock, launcher cvars, XMA/Downpour audio work). Rebuilt
+  `rexruntimerd.dll` (RelWithDebInfo) and deployed it to the game build; boot
+  verified alive 110 s with no FATAL. The game's generated code still carries the
+  old guest traces (`MIXTRACE`/`WORKER`/`THREADSTART`) — that lives in the
+  analysis project, not the repo, and is removed by a forced codegen.
+- **Host music made usable.** New `tools/host-music.ps1` extracts `menu.wav`
+  (`95D00942` #29 `Main_full_02`, 170 s) and `race.wav` (#45 `Acapulco_final_02`)
+  from the dump's own banks using `tools/out/fsb5.exe` + FFmpeg. The pre-boot
+  launcher gains a **Background music (host)** toggle (auto-on when tracks exist)
+  plus **Fullscreen / VSync / resolution scale** video options. `install-launcher.ps1`
+  now also deploys `src/audio/host_music.h`. Verified: boot with `--host_music true`
+  logs `host_music: writing/playing 'menu.wav'` and stays alive.
+- **Phase 2 catalog.** `tools/catalog/ue3_catalog.py` parses the big-endian UE3
+  summary from each `.xxx` and writes `docs/ue3-catalog.md` (**320** packages, all
+  v860/0, with name/export/import counts). The name map itself is stored in LZO
+  chunks in these cooked packages, so symbol *names* are marked compressed and not
+  listed yet; the counts are from the uncompressed summary and are reliable.
+- **Phase 9/10.** Added `.github/workflows/release.yml` (code-only tooling
+  bundle on tag, refuses tracked game assets) and `docs/BUILD.md`; refreshed
+  `README.md`, `CHANGELOG.md`, `docs/roadmap.md`.
+
+Not run/verified this session: audible output of host music (no audio capture
+here), the launcher UI on screen, and the release workflow (no CI run).
+
+## Audio guest diagnosis: the title never loads the sound banks (2026-10-04, latest)
+
+Ran the game under a symbolized LLDB debugger and captured the guest call stack
+for the `FMODAudio.xxx` open:
+
+`NtCreateFile_entry <- sub_830D0FA0 <- sub_829E4F40 <- sub_822EB0F0 <-
+sub_822EB888 <- sub_8235CB60 <- sub_830E9C98 (thread)`.
+
+What is measured and closed:
+- ReXGlue opens `FMODAudio.xxx` but **never any `.fsbcache`**; Xenia opens 7 banks
+  (`<hash>.xxx` -> `<hash>.fsbcache` fallback loader). In ReXGlue **no sound asset**
+  goes through the UE3 package loader, so the title's audio system **never
+  activates voices** -> silent mixer. The intro audio the user hears does not come
+  from UE3 sound assets.
+- The engine/hilos work: the mixer (`sub_82BB1188`) runs and submits frames; the
+  workers `sub_82BAD4B0`/`sub_82ED1B98` are created and run with the **same
+  start/context as Xenia**.
+- Not a shim: no `XAudio*` stub is invoked (only `XamVoiceSetMicArrayIdleUsers`);
+  not profile/mute; not VFS (no failed bank opens); not the decoder (Downpour's
+  audio was ported with no effect). Updating to the Oct-2 nightly would not help
+  either (its 24 commits are UI/input/build; 63 lines in kernel/fs).
+- Conclusion: the title's UE3 audio **activation** does not fire in ReXGlue. This
+  is game logic -> needs UE3 audio-system reversing, not a one-line shim patch.
+
+Tooling left in place: `tools/debug-audio.ps1` (LLDB + exe/runtime PDBs, symbolized
+guest stacks; space-free junction `C:\Users\israe\ocho_dump`). The runtime also has
+Downpour's `src/audio/*` ported, plus temporary guest instrumentation
+(`AUDIOFILE`/`BT`/`DIRQUERY`/`THREADCREATE` in `xboxkrnl_io.cpp`/`xboxkrnl_threading.cpp`,
+`MIXTRACE`/`THREADSTART`/`WORKER`/`WAIT` in generated `.cpp`) to revert later.
+
+## Audio host-side player in the runtime (2026-10-04, latest)
+
+Wired an in-process host music player into the game overlay so the dump's music
+plays during the game regardless of the silent guest mixer.
+
+- `src/audio/host_music.h` (source of truth; mirrored to
+  `%ProgramData%\rextools\proj-ocho-kart\src\audio\host_music.h`):
+  `ocho::audio::HostMusic` opens a 48 kHz stereo s16 `SDL_AudioStream`, loops
+  pre-decoded WAVs, and converts any PCM16 rate/channel layout to the device
+  format with linear interpolation.
+- `src/launcher/ocho_kart_app.h` (mirrored to the project's
+  `src/ocho_kart_app.h`): `OnPostSetup` starts it (guest memory via
+  `runtime()->memory()->TranslateVirtual`), `OnShutdown` stops it.
+- **Placement:** menu track by default; switches to the race track when the guest
+  XMA voice array (`0x83C12330`) has entries; `host_music_start_delay_ms` (default
+  15000) keeps it silent during the intro so it does not overlap.
+- Opt-in cvar `host_music` (default false); alt cvars `host_music_dir`,
+  `host_music_menu`, `host_music_race`, `host_music_gain`,
+  `host_music_state_addr/stride/count`, `host_music_poll_ms`,
+  `host_music_start_delay_ms`. Fails safe.
+
+Measured (2026-10-04): starts after the delay and plays `menu.wav`; game stays
+alive. (An intermittent launcher self-close is separate, see the open issue.)
+
+## Audio host-side: FSB5 parser + XMA decode → audible (2026-10-04)
+
+Chose the host-side fallback for audio over more guest chasing. New tool reads the
+user's own cooked sound banks directly and reproduces the title's XMA audio on the
+PC without touching the guest or the runtime:
+
+- `tools/fsb5/fsb5.cpp` — dependency-free C++17 FSB5 reader (version 1; codec
+  `0x0A` XMA plus PCM8/16) and WAV writer. XMA subsounds are wrapped in a WAV with
+  an `XMA2` chunk (XMA2WAVEFORMAT v4); FFmpeg's WAV demuxer turns it into decoder
+  extradata and its native `xma2` decoder produces PCM.
+  Commands: `list`, `extract <bank> <idx> <out.wav>`, `extract-all <bank> <dir>`.
+- `tools/fsb5/build.ps1` — builds to `tools/out/fsb5.exe` (gitignored) with
+  clang + VS Build Tools.
+- `tools/fsb5/play.ps1` — extract + `ffmpeg` decode + optional `ffplay` playback
+  (`-Play`) or save (`-Out`).
+
+Measured (2026-10-04):
+- All **15** `*.fsbcache` banks parse clean (FSB5 v1, codec `0x0A`): **7034
+  subsounds**, zero warnings; readable names where present (e.g.
+  `brasil_soccer_final_01`).
+- Music bank `95D00942` #0 (2ch/48kHz): 2.47 s, `mean -29.2 dB`, `max -10.5 dB`;
+  #1: 44.54 s, `mean -23.0 dB`, `max -8.8 dB` — real audio.
+- `649B9BA1`: `extract-all` writes all 25 with zero failures; all decode with
+  signal (`mean ≈ -19 dB`).
+- A Python prototype in temp produced the same `mean -29.2 dB`; the C++ parser
+  matches.
+
+This closes the host-side fallback: the dump's music/effects are decodable and
+audible now, independent of the still-silent guest mixer. Optional follow-up:
+wire a host-side player into the runtime and pick the subsound from game state.
+The C++ parser is ready to reuse there. See `docs/audio-restart.md`.
+
+## Audio: Kick DOES exist in the guest; menu has no context at all (2026-10-03, latest)
+
+The previous "fresh review" claim that the title "never writes Kick (0x650); only Lock
+0x690 and Clear 0x6A0" is **wrong** — it only looked at `.89` and `.301`. There is a third
+`s twbrx` target: **`sub_82B8B5B8` (`ocho_kart_recomp.92.cpp:17351`)**. Its arithmetic
+(`addis r9,r9,8187` + `addi r9,r9,-31152`, then `rlwinm r9,r9,2,0,29`) resolves to physical
+`0x1FFA8650` → virtual `0x7FEA1940` → **reg `0x650` = Context0Kick**. It is the "kick" pass
+over the voice list and it clears flag `0x20000` on the way out. It is called from
+`sub_82B875B8` (`ocho_kart_recomp.200.cpp:17041`), which is a virtual method (no direct
+callers). So the guest driver does have: `sub_82B8AC20` = create+Clear, `sub_82B8B448` =
+tick+Lock, `sub_82B8B5B8` = kick. The shim's Kick → `Enable()` + `Work()` path is correct.
+
+Instrumented and measured this session (runtime rebuilt + deployed):
+- Added cvar `xma_trace_writes` (logs each Kick/Lock/Clear and the deduped `0x601` write)
+  and `xma_lock_decodes` (experimental, default off). Patch:
+  `patches/rexglue-sdk-xma-trace-and-lock-decode.patch`.
+- **Boot→menu, 130 s, `REX_XMA_TRACE_WRITES=true`: 35 283 writes, all to `0x601`
+  (`0x02`/`0x03`). Zero Kick, zero Lock, zero Clear.** So in the menu no XMA context is
+  ever created; the 320-slot array is empty and only the `0x601` transaction from
+  `sub_82B8B448` runs. `xma_lock_decodes` cannot help the menu because no Lock is written
+  either.
+- The decisive missing measurement is now **boot→race** with `xma_trace_writes` on: it
+  settles whether the effects path really kicks (and thus decodes), separating "menu never
+  starts the music" (upstream title logic) from "shim never decodes".
+
+Root cause of silent menu music remains upstream of the shim: the title never registers a
+music voice in the menu, so `sub_82B893A0`/`sub_82B8B5B8` never run there. Next step is to
+find what the title waits for before starting the menu music (a game-state/asset/notification
+gate), which needs either a race trace or an interactive debugger.
+
+## Audio fresh review from zero: two corrections (2026-10-03, latest)
+
+Re-read the whole audio path from scratch (shim sources in `external/rexglue-sdk/src/audio/*`,
+`src/kernel/xboxkrnl/xboxkrnl_audio*.cpp`, `src/kernel/xam/apps/xmp_app.cpp`, the register table, and
+the game's recompiled audio code in `generated/ocho_kart_recomp.44/60/77/86/89/92/191/227/246/266/
+274/299/301.cpp`), plus the one real run log that reaches the menu
+(`out/build/win-amd64/logs/ocho_kart_008.log`). Two things the earlier notes state wrongly:
+
+1. **The shim is NOT line-for-line faithful to Xenia.** The claim in the
+   "shim compared to Xenia XmaContextNew; faithful" section is too strong. The vendored
+   `xma_decoder.cpp`/`xma_context.cpp` carry deliberate ReXGlue changes that diverge from Xenia
+   Canary's current `xma_context_new.cc`/`xma_decoder.cc`:
+   - **Kick decodes inline.** Xenia enables the context, signals the worker, and (with a dedicated
+     thread) blocks on `WaitForWorkDone()`. ReXGlue instead calls `context.Work()` inline inside
+     `WriteRegister` (commit `29eaa8a`) and never waits. Behaviour differs if the guest reads the
+     context struct immediately after the kick.
+   - **`XmaContext::Work()` is a simplified port.** It lacks Xenia's "no input" stall-detector branch
+     (NFS: Carbon/MW read `output_buffer_write_offset`), its double-check before invalidating the
+     output buffer, and Xenia's "don't abandon a partially consumed frame / decode stalled" loop
+     guards. Also the loop/`carry_frame`/`kDecoderStartPadding` machinery in the ReXGlue port is a
+     ReXGlue-only interpretation, not Xenia.
+   - These are candidate bugs, not proven to be *the* blocker, but the previous "no divergence found"
+     statement must not be relied on.
+
+2. **The game drives XMA by MMIO and never writes a Kick (0x650); it writes Lock (0x690) and Clear
+   (0x6A0).** Confirmed by decoding the guest's own arithmetic:
+   - It imports only `XMACreateContext`/`XMAReleaseContext` (ordinals 548/550 in
+     `docs/toolchain/xex-imports-signed.md`) — **not** `XMAEnableContext`/`XMADisableContext`. So it
+     cannot Enable by API.
+   - `sub_82B8AC20` (`ocho_kart_recomp.89`), the per-voice creator called from `sub_82B8B8C0`, calls
+     `XMACreateContext`, maps the context with `MmMapIoSpace`, then writes a per-context bit to
+     physical `0x7FEA1A80` = reg `0x6A0` = **Context0Clear**.
+   - `sub_82B8B448` (`ocho_kart_recomp.301`), the engine tick that does run, sweeps the 320-slot list
+     at `0x83C12330` and for each ready context writes to physical `0x7FEA1A40` = reg `0x690` =
+     **Context0Lock**. It never writes Kick.
+   - Only three `stwbrx` sites target the XMA MMIO window (`.89`, `.92`, `.301`); none resolves to
+     `0x650` (Kick). `0x601` (`0x7FEA1804`, `0x02`/`0x03`) is bracketing/lock traffic only.
+
+   In the shim, Kick is the **only** path that calls `context.Enable()`; Lock calls `Disable()` and
+   Clear calls `Clear()`. So a context created by this title is never enabled → `Work()` returns
+   false → no decode. That is consistent with the measured zero/garbage mix buffer. If gameplay
+   effects are audible (as reported earlier), there must be a Kick path not found by static reading,
+   or the effect audio comes from a different client. This is the one thing that must be measured,
+   not argued.
+
+Concrete next step (small, bounded): add a temporary log in `XmaDecoder::WriteRegister` printing
+every `(r, value)` for `r` in `0x610..0x6AF` plus `0x601`, and run a boot→menu→race. That settles
+whether any Kick ever reaches the shim. If none does, the fix is either (a) find the guest's real
+kick gesture, or (b) make the shim treat Clear-after-init as the decode trigger the title expects —
+but only after Xenia is confirmed to do the same (it currently does not, so (b) is a guess and must be
+validated against Xenia on the same title). No code changed in this review; analysis only.
+
+## Audio: Xenia comparison narrows it to the title's XAudio mixer producing zeros (2026-10-03)
+
+Ran the same dump under **Xenia Canary** (downloaded, outside the repo) to compare the audio path, per
+the plan in the previous sections. Findings:
+
+- **Xenia registers 2 XAudio render clients** (`AudioSystem::RegisterClient` for index 0 and 1);
+  ReXGlue also registers 2 (confirmed by instrumenting `XAudioRegisterRenderDriverClient_entry`: the
+  title calls it twice, callbacks `0x7018F558` and `0x7018CC18`, both with guest callback
+  `0x82BB13A8`). So client registration is *not* the gap — both emulators get two clients.
+- **Both clients submit to the same guest buffer `0x83C12870`**, and instrumenting
+  `AudioSystem::SubmitFrame` shows every submitted frame is `peak=0` (all zeros), for both indices,
+  all through the menu. So the guest's mixer hands the emulator silence.
+- The render-driver callback is `0x82BB13A8` → `sub_82BB1188` (the mixer loop): it waits on events,
+  reads the guest mix source at `+60`, and copies 256 frames x 6 channels through `sub_82BB0FC8`.
+  The XMA engine (`sub_82B8B448`, sweeping the 320-slot list at `0x83C12330`) is a **separate**
+  system that is empty in the menu (`nonnull=0/320`, measured).
+- Xenia also fails `XamVoiceSetMicArrayIdleUsers` (logs "not implemented"), so that stub is not the
+  cause either.
+
+Conclusion: the emulator side behaves correctly (clients registered, frames pulled, endpoint open at
+2ch/48kHz). The title's own XAudio mixer produces an all-zero buffer and its XMA voice list is never
+populated — the same "engine never registers voices" blocker, now confirmed title-side, not a
+registration/shim gap. All instrumentation reverted (generated `.cpp`, `audio_system.cpp`,
+`xboxkrnl_audio.cpp`, and a stray `sdl_audio_driver.cpp` diag left by the previous session); runtime
+and game rebuilt and deployed clean.
 
 ## Audio: the game's own audio engine (not XMP, not the shim) is the blocker (2026-10-03)
 
@@ -84,12 +320,15 @@ in this session (analysis only).
 | 0 bootstrap | done |
 | 0.5 dump audit | done |
 | 1 xex analysis | done |
-| 2 UE3 catalog | started — package inventory by name done (320 `.xxx`), class-level catalog pending admin tool |
+| 2 UE3 catalog | done — 320 packages catalogued (`docs/ue3-catalog.md`); symbol names still LZO-chunked |
 | 3 compile recomp C++ | done |
 | 4 shaders | partially working (101 shaders translated, 87 pipelines — `run-race4.log` 2026-10-03 07:59) |
 | 5 kernel shims / boot | **done — runs stable past the intro with GPU** |
 | 6 renderer | in progress (Xenos GPU plugin renders the intro) |
-| 7 input / audio / stability | in progress — input stabilized, audio silent, cinematics blocked on Bink decoder, stutter is PSO compile |
+| 7 input / audio / stability | in progress — input stabilized, guest audio silent (host-side music covers it), cinematics blocked on Bink decoder |
+| 8 PC options | partial — launcher has fullscreen / vsync / resolution scale |
+| 9 CI releases | partial — `release.yml` packages code-only tooling on tag |
+| 10 contributor docs | done — `docs/BUILD.md` |
 
 ## InputSystem::RefreshDevices race — CLOSED (2026-10-03)
 
@@ -591,6 +830,11 @@ Still open:
    (`GetPlaybackController` → 0, then `SetPlaybackController(0,1)`), and XMA exports are never called.
    Needs a dedicated engine-debug session to find what the title waits for before building its voice
    list. See the top section. Not a one-line shim change.
+   **Fresh-review corrections (2026-10-03):** (a) the shim is *not* line-for-line faithful to Xenia
+   (inline kick decode; simplified `Work()`); (b) the title drives XMA by MMIO writing Lock `0x690`
+   and Clear `0x6A0`, never Kick `0x650`, and imports only `XMACreateContext`/`XMAReleaseContext`.
+   The one decisive measurement still missing: log every XMA `(r,value)` write from boot to a race to
+   settle whether any Kick ever arrives. See the new top section.
 2. Launcher closes with no input while the machine is unattended (not reproduced in a 4-minute idle
    run). See "Open issue" above. Suspected external window close request.
 3. `0xC0000005` seen once in the GPU plugin. **Checked on the current build: not reproduced.**
@@ -617,4 +861,8 @@ Still open:
 | Codegen+build+run | `tools/boot-loop.ps1` |
 | Crash peeler | `tools/peel.ps1` |
 | Launch for viewing | `tools/run-game.ps1` |
+| FSB5 audio parser/extractor | `tools/fsb5/fsb5.cpp` (build `tools/fsb5/build.ps1` → `tools/out/fsb5.exe`) |
+| FSB5 decode/play | `tools/fsb5/play.ps1` |
+| Host music player (runtime) | `src/audio/host_music.h` + `src/launcher/ocho_kart_app.h` |
+| Audio debugger (LLDB + PDBs) | `tools/debug-audio.ps1` + `tools/debug-audio/audio.lldb` (junction `C:\Users\israe\ocho_dump`) |
 | Signed imports | `docs/toolchain/xex-imports-signed.md` |

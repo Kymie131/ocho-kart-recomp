@@ -4,20 +4,40 @@ Static recompilation of **El Chavo Kart** (Xbox 360, UE3) to native PC via [ReXG
 
 Unaffiliated with Microsoft, Xbox, Epic, Efecto Studios, Televisa, or Grupo Chespirito. Educational/preservation use only.
 
+## Status
+
+The game boots past the intro with the Xenos GPU plugin and is playable (input
+stable; effects that reach the guest XMA path are audible). Two upstream-scale
+gaps remain: the title's own UE3/FMOD audio activation never fires (the guest
+mixer hands the runtime silence, so menu/race music is silent), and the Bink
+cinematics have no in-runtime decoder. A host-side music player covers the
+former from the user's own dump.
+
+Build and run steps: `docs/BUILD.md`. Current state and open issues:
+`docs/STATE.md`.
+
 ## Layout
 
 ```
-docs/          notes, roadmap, signed import table
-external/      rexglue-sdk submodule
-src/           shims, renderer, input (grows per phase)
-tools/         xex-imports.ps1, ReXGlue manifests, run-codegen.ps1
-scripts/       env setup
+docs/          notes, roadmap, build guide, package catalog, signed import table
+external/      rexglue-sdk submodule (carries local shim patches)
+src/           launcher + host-side audio (grows per phase)
+tools/         codegen/build/run scripts, FSB5 audio tools, UE3 catalog
+patches/       SDK patches applied to the vendored submodule
+scripts/       env setup, asset-blocking git hook
 tests/
 ```
 
-## Status
+## Documentation
 
-Phase 1 analysis done: `default.xex` import table signed (307 entries), ReXGlue codegen emits C++. Next is compile (Phase 3) and UE3 package catalog (Phase 2). Details in `docs/STATE.md` and `docs/reversing-notes.md`.
+| File | What |
+|---|---|
+| `docs/BUILD.md` | Build and run from your own dump |
+| `docs/STATE.md` | Current state, measurements, open issues |
+| `docs/roadmap.md` | Phase table |
+| `docs/reversing-notes.md` | Dump/asset RE findings |
+| `docs/ue3-catalog.md` | Package catalog (names/counts only) |
+| `docs/audio-restart.md` | Audio work log and facts |
 
 ## Credits
 
