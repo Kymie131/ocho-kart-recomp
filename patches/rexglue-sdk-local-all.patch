@@ -2003,11 +2003,56 @@ index a84b5f5..16673d7 100644
    context.sample_rate = context_init->sample_rate;
  
    context.loop_start = context_init->loop_data.loop_start;
+diff --git a/src/kernel/xboxkrnl/xboxkrnl_io.cpp b/src/kernel/xboxkrnl/xboxkrnl_io.cpp
+index 3f1a852..b08a82e 100644
+--- a/src/kernel/xboxkrnl/xboxkrnl_io.cpp
++++ b/src/kernel/xboxkrnl/xboxkrnl_io.cpp
+@@ -12,6 +12,7 @@
+ // Disable warnings about unused parameters for kernel functions
+ #pragma GCC diagnostic ignored "-Wunused-parameter"
+ 
++#include <rex/cvar.h>
+ #include <rex/filesystem/device.h>
+ #include <rex/kernel/xboxkrnl/private.h>
+ #include <rex/logging.h>
+@@ -29,6 +30,10 @@
+ #include <rex/system/xtypes.h>
+ #include <rex/thread/mutex.h>
+ 
++REXCVAR_DEFINE_BOOL(trace_file_opens, false, "Kernel",
++                    "Log every NtCreateFile/NtOpenFile path and result at info level "
++                    "(e.g. to see whether the title ever opens a sound bank or cache: file).");
++
+ namespace rex::kernel::xboxkrnl {
+ using namespace rex::system;
+ 
+@@ -168,6 +173,10 @@ u32 NtCreateFile_entry(mapped_u32 handle_out, u32 desired_access,
+   }
+ 
+   *handle_out = handle;
++  if (REXCVAR_GET(trace_file_opens)) {
++    REXKRNL_INFO("FILEOPEN NtCreateFile '{}' disp={:#x} -> {:#x}", target_path,
++                 (uint32_t)creation_disposition, result);
++  }
+   if (XFAILED(result)) {
+     REXKRNL_IMPORT_FAIL("NtCreateFile", "path='{}' -> {:#x}", target_path, result);
+   } else {
+@@ -537,6 +546,10 @@ u32 NtQueryFullAttributesFile_entry(ppc_ptr_t<X_OBJECT_ATTRIBUTES> obj_attribs,
+ 
+   // Resolve the file using the virtual file system.
+   auto entry = REX_KERNEL_FS()->ResolvePath(target_path);
++  if (REXCVAR_GET(trace_file_opens)) {
++    REXKRNL_INFO("FILEOPEN NtQueryFullAttributesFile '{}' -> {}", target_path,
++                 entry ? "found" : "missing");
++  }
+   if (entry) {
+     // Found.
+     file_info->creation_time = entry->create_timestamp();
 diff --git a/src/kernel/xboxkrnl/xboxkrnl_ob.cpp b/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
-index 5709e6d..e3fab37 100644
+index 5709e6d..0beffa5 100644
 --- a/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
 +++ b/src/kernel/xboxkrnl/xboxkrnl_ob.cpp
-@@ -181,6 +181,18 @@ u32 ObCreateSymbolicLink_entry(ppc_ptr_t<X_ANSI_STRING> path_ptr,
+@@ -181,6 +181,21 @@ u32 ObCreateSymbolicLink_entry(ppc_ptr_t<X_ANSI_STRING> path_ptr,
      path = path.substr(4);  // Strip the full qualifier
    }
  
@@ -2020,8 +2065,11 @@ index 5709e6d..e3fab37 100644
 +  // the same and 4D5307DC expects success here.
 +  std::string existing_target;
 +  if (REX_KERNEL_FS()->FindSymbolicLink(path, existing_target)) {
++    REXKRNL_INFO("ObCreateSymbolicLink('{}' -> '{}'): kept existing link to '{}'", path, target,
++                 existing_target);
 +    return X_STATUS_SUCCESS;
 +  }
++  REXKRNL_INFO("ObCreateSymbolicLink('{}' -> '{}')", path, target);
 +
    if (!REX_KERNEL_FS()->RegisterSymbolicLink(path, target)) {
      return X_STATUS_UNSUCCESSFUL;

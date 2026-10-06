@@ -11,7 +11,12 @@
   rewritten `ue3_catalog.py` decode names, imports, exports and classes.
 - Audio diagnosis: the title's audio is FMOD Ex + FMOD Event/Music; menu music
   is an FMOD music cue started by Kismet in `TitleMap`.
-- Tooling: `tools/apply-sdk-patches.ps1`, `tools/build-sdk.ps1`.
+- Tooling: `tools/apply-sdk-patches.ps1`, `tools/build-sdk.ps1`,
+  `tools/setup-and-test.ps1` (fresh-PC setup + build + traced run),
+  `tools/common.ps1` (finds any VS 2022 edition via vswhere); `run-game.ps1`
+  takes `-DumpPath` (no hard-coded path), `-Trace`, `-ExtraArgs`, `-LogFile`,
+  and passes `--host_music` as two arguments.
+- SDK: `trace_file_opens` cvar; `ObCreateSymbolicLink` logs the links the title creates.
 - Docs: `STATE.md` rewritten as current state with a corrections table; old log
   archived in `docs/history/`; `docs/prior-art.md` (all other Xbox 360 ports).
 

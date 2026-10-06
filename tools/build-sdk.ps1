@@ -9,7 +9,9 @@
 
 param(
     [string]$InstallDir = "$env:ProgramData\rexglue-sdk-ocho",
-    [ValidateSet('Debug','Release','RelWithDebInfo')][string]$Config = 'RelWithDebInfo',
+    # Release is always built: it is the only configuration that installs
+    # rexglue.exe. Add another one (e.g. RelWithDebInfo for PDBs) with -Config.
+    [ValidateSet('Debug','Release','RelWithDebInfo')][string]$Config = 'Release',
     [switch]$SkipPatch
 )
 
@@ -17,8 +19,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $sdk = Join-Path $repoRoot 'external\rexglue-sdk'
 
-$vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-if (-not (Test-Path -LiteralPath $vcvars)) { throw "vcvars64.bat not found: $vcvars" }
+. (Join-Path $PSScriptRoot 'common.ps1')
+$vcvars = Find-VcVars
 
 if (-not $SkipPatch) {
     & (Join-Path $PSScriptRoot 'apply-sdk-patches.ps1')
@@ -26,15 +28,20 @@ if (-not $SkipPatch) {
 }
 
 $buildDir = Join-Path $sdk 'out\build\win-amd64'
-$cmd = @(
-    "call `"$vcvars`"",
-    "cd /d `"$sdk`"",
-    "cmake --preset win-amd64 -DCMAKE_INSTALL_PREFIX=`"$InstallDir`"",
-    "cmake --build `"$buildDir`" --config $Config --parallel",
-    "cmake --install `"$buildDir`" --config $Config"
-) -join " && "
+$configs = @('Release')
+if ($Config -ne 'Release') { $configs += $Config }
+$steps = @("call `"$vcvars`"", "cd /d `"$sdk`"",
+           "cmake --preset win-amd64 -DCMAKE_INSTALL_PREFIX=`"$InstallDir`"")
+foreach ($c in $configs) {
+    $steps += "cmake --build `"$buildDir`" --config $c --parallel"
+    $steps += "cmake --install `"$buildDir`" --config $c"
+}
+$cmd = $steps -join " && "
 
-Write-Output "== ReXGlue SDK ($Config) -> $InstallDir =="
+Write-Output "== ReXGlue SDK ($($configs -join ', ')) -> $InstallDir =="
 cmd /c $cmd
 if ($LASTEXITCODE -ne 0) { throw "SDK build failed ($LASTEXITCODE)" }
-Write-Output "done. Rebuild the game with: tools/build.ps1 -SdkDir `"$InstallDir`""
+$rexglue = Join-Path $InstallDir 'bin\rexglue.exe'
+if (-not (Test-Path -LiteralPath $rexglue)) { throw "install finished but $rexglue is missing" }
+Write-Output "done: $rexglue"
+Write-Output "Next: tools/run-codegen.ps1 -ReXGlue `"$rexglue`" ..., then tools/build.ps1 -SdkDir `"$InstallDir`""

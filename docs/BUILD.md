@@ -30,6 +30,18 @@ committed. Nothing here ships game content.
 The analysis project is created by `rexglue` once; afterwards this repo drives it
 via `tools/`.
 
+## One-shot setup (fresh Windows PC)
+
+`tools/setup-and-test.ps1` does everything below in one go: installs the
+missing tools with winget (Git, CMake, Ninja, LLVM, Python, FFmpeg, VS 2022
+Build Tools), clones the repo, fetches submodules, builds the patched SDK,
+creates the analysis project (`rexglue init`) if needed, runs codegen, builds
+the game and starts a traced run, then writes a summary of the run.
+
+```
+powershell -ExecutionPolicy Bypass -File tools/setup-and-test.ps1 -DumpPath "D:\path\to\EL CHAVO KART"
+```
+
 ## First build
 
 0. Build the patched SDK once (and after every change in `patches/`):
@@ -67,7 +79,8 @@ This launches `ocho_kart.exe --gpu_plugin xenos --user_language 5`. The Xenos
 GPU plugin is required for a picture. The pre-boot launcher lets you pick the
 language, controller icons, video options, and host music.
 
-Headless/skip the launcher with `REX_LAUNCHER_SKIP=true`.
+Headless/skip the launcher with `REX_LAUNCHER_SKIP=true`. `-Trace` turns on the
+DPC, file-open and XMA traces; `-ExtraArgs` passes anything else.
 
 Runtime switches added by this repo's SDK patches (all match Xenia Canary):
 
@@ -75,6 +88,7 @@ Runtime switches added by this repo's SDK patches (all match Xenia Canary):
 |---|---|---|
 | `kernel_dispatch_dpcs` | true | run `KeInsertQueueDpc` routines (upstream never ran them) |
 | `kernel_trace_dpcs` | false | log every queued DPC |
+| `trace_file_opens` | false | log every `NtCreateFile`/`NtOpenFile`/`NtQueryFullAttributesFile` path and result |
 | `mount_cache` | true | writable `cache:`/`cache0:`/`cache1:` under `<user data>/xbox_cache` |
 | `xma_trace_writes` / `xma_lock_decodes` | false | XMA diagnostics |
 

@@ -137,8 +137,10 @@ above being created.
 
 1. `tools/build-sdk.ps1`, then `tools/run-codegen.ps1`, `tools/install-launcher.ps1`,
    `tools/build.ps1 -SdkDir "$env:ProgramData\rexglue-sdk-ocho"`.
-2. Boot → menu with `--kernel_trace_dpcs true`; confirm the DPC routine
-   `82B63818` runs and nothing regresses (intro, input, 2-player).
+2. Boot → menu with `tools/run-game.ps1 -Trace` (DPC, file-open and XMA
+   traces; `tools/setup-and-test.ps1` does steps 1-2 and summarises the log);
+   confirm the DPC routine `82B63818` runs and nothing regresses (intro, input,
+   2-player).
 3. Check `<user_data_root>/xbox_cache/` after a run: if the title wrote
    `$cache$` files there, the cache mount is live. Compare with Xenia's
    `cache0`/`cache1`.

@@ -11,8 +11,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-if (-not (Test-Path -LiteralPath $vcvars)) { throw "vcvars64.bat not found: $vcvars" }
+. (Join-Path $PSScriptRoot 'common.ps1')
+$vcvars = Find-VcVars
 if (-not (Test-Path -LiteralPath $SdkDir)) { throw "SDK not found: $SdkDir" }
 if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "project not found: $ProjectDir" }
 

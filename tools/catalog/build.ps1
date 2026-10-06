@@ -16,8 +16,8 @@ if (-not (Test-Path -LiteralPath (Join-Path $mspack 'lzxd.c'))) {
     throw "libmspack not found at $mspack (run: git submodule update --init --recursive)"
 }
 
-$vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-if (-not (Test-Path -LiteralPath $vcvars)) { throw "vcvars64.bat not found: $vcvars" }
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'common.ps1')
+$vcvars = Find-VcVars
 if (-not (Get-Command clang -ErrorAction SilentlyContinue)) { throw "clang not on PATH" }
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null

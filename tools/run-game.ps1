@@ -1,4 +1,4 @@
-# Launch the recompiled game so you can watch it run.
+﻿# Launch the recompiled game so you can watch it run.
 # The Xenos GPU plugin is required for a picture; without it the window is black.
 #
 # On a 360 the console picks the language, not the game. The title reads
@@ -13,16 +13,22 @@
 #   powershell -File tools/run-game.ps1 -DumpPath "D:/Games/EL CHAVO KART"
 #   powershell -File tools/run-game.ps1 -Language 1
 #   powershell -File tools/run-game.ps1 -LogLevel info
+#   powershell -File tools/run-game.ps1 -DumpPath "..." -Trace   # DPC + file-open + XMA traces
+#   powershell -File tools/run-game.ps1 -DumpPath "..." -ExtraArgs '--mount_cache','false' 
 #
 # Log level defaults to debug so D3D12 pipeline creation (the source of the
 # brief black flicker when a challenge first uses a new shader pair) is logged.
 
 param(
-    [string]$DumpPath = "C:/Users/israe/OneDrive/Documentos/REPOS/Proyecto_descompilacion/EL CHAVO KART",
+    [Parameter(Mandatory = $true)][string]$DumpPath,
     [string]$ProjectDir = "$env:ProgramData\rextools\proj-ocho-kart",
     [int]$Language = 5,
     [ValidateSet('info','debug','trace')][string]$LogLevel = 'debug',
-    [switch]$NoMusic
+    [switch]$NoMusic,
+    # Diagnostics for the audio investigation (docs/STATE.md, "Next").
+    [switch]$Trace,
+    [string[]]$ExtraArgs = @(),
+    [string]$LogFile = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,11 +51,16 @@ if (-not $NoMusic) {
         }
     }
     if (Test-Path -LiteralPath (Join-Path $hostMusic 'menu.wav')) {
-        $extra += '--host_music true'
+        $extra += '--host_music', 'true'
     }
 }
+if ($Trace) {
+    $extra += '--kernel_trace_dpcs=true', '--trace_file_opens=true', '--xma_trace_writes=true'
+}
+$extra += $ExtraArgs
 
-$log = Join-Path $ProjectDir 'docs\run-live.log'
+$log = if ($LogFile) { $LogFile } else { Join-Path $ProjectDir 'docs\run-live.log' }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
 Write-Output "launching (GPU plugin xenos, user_language $Language, log $LogLevel). Log: $log"
 Write-Output "Close the game window to stop."
 
