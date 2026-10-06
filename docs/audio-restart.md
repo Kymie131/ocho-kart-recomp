@@ -208,6 +208,8 @@ Para que la música no dependa de exportar a mano:
   activado por defecto si ya existen `menu.wav`/`race.wav`; al aceptar fija
   `host_music`. También expone `fullscreen`, `vsync` y `resolution_scale`.
 - `tools/install-launcher.ps1` despliega además `src/audio/host_music.h`.
+- `tools/run-game.ps1` extrae la música automáticamente si falta `menu.wav` y hay
+  FFmpeg en PATH, y lanza con `--host_music true` (`-NoMusic` para desactivar).
 
 Medido: boot con `--host_music true` registra `host_music: playing 'menu.wav'`
 y el proceso sigue vivo; salida audible no verificable aquí.

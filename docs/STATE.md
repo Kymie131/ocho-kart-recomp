@@ -817,36 +817,31 @@ Note the entry point here is `XamInputSetState` (rumble), a *different* XInput e
 samples only saw single-threaded `GetState`, which is why the race looked unconfirmed; the
 `SetState` path is the one that traps it. Upstream SDK bug in `rex::input::InputSystem`.
 
-## Next (updated 2026-10-03)
+## Next (updated 2026-10-06)
 
-Done since the previous list: the InputSystem lock fix (committed `73f6691`), the upstream issue
-#475 with the full diff, and the local patch saved.
+Done since the previous list: host-side music (extraction + runtime player +
+launcher toggle + auto-extract in `run-game.ps1`), the Phase 2 package catalog,
+the launcher video options, the code-only release workflow, the consolidated SDK
+patch, and the runtime instrumentation cleanup with a verified boot.
 
 Still open:
 
-1. Audio. **Engine is the blocker (2026-10-03, latest):** the title's own mixer never registers voices
-   (`sub_82B893A0` runs 0 times; `sub_82B8B8C0`/`sub_82B8AC20` never called), while the engine tick
-   `sub_82B8B448` runs constantly over an empty 320-slot array. XMP is only the ownership handshake
-   (`GetPlaybackController` → 0, then `SetPlaybackController(0,1)`), and XMA exports are never called.
-   Needs a dedicated engine-debug session to find what the title waits for before building its voice
-   list. See the top section. Not a one-line shim change.
-   **Fresh-review corrections (2026-10-03):** (a) the shim is *not* line-for-line faithful to Xenia
-   (inline kick decode; simplified `Work()`); (b) the title drives XMA by MMIO writing Lock `0x690`
-   and Clear `0x6A0`, never Kick `0x650`, and imports only `XMACreateContext`/`XMAReleaseContext`.
-   The one decisive measurement still missing: log every XMA `(r,value)` write from boot to a race to
-   settle whether any Kick ever arrives. See the new top section.
-2. Launcher closes with no input while the machine is unattended (not reproduced in a 4-minute idle
-   run). See "Open issue" above. Suspected external window close request.
-3. `0xC0000005` seen once in the GPU plugin. **Checked on the current build: not reproduced.**
-   Original: dump `ocho_kart.exe.36364.dmp`, `INVALID_POINTER_READ` at `rexgpu-xenosrd.dll+0x1d281`
-   (module timestamp `0x6a88d2d8` = 2026-08-21, the prebuilt SDK plugin; no matching PDB).
-   On the current locally built plugin (own `rexgpu-xenosrd.pdb`), four runs with
-   `REX_LAUNCHER_SKIP=true` each survived 90s alive with no exit and no crash in the Windows Error
-   Reporting log. Closed as not reproduced on the current build; possibly fixed by the plugin
-   rebuild. Reopen if it reappears.
-4. Cinematics: title asks for `.xxx`/`.txt` movie containers, the dump ships raw `.BIK`, and the
-   runtime has no Bink decoder. Needs UE3 packaging plus a decoder, not just path mapping.
-5. Phase 2 (UModel catalog) in parallel.
+1. Guest audio. The title never loads a `*.fsbcache` bank (confirmed again
+   2026-10-06 boot→menu trace: it opens only `FMODAudio.xxx`); the terminal
+   blocker is the title's own UE3/FMOD activation, upstream of every shim. Needs
+   an interactive guest breakpoint in the voice manager (`sub_82B893A0`) / the
+   FMOD bank load to see what it waits for. Host-side music covers the symptom.
+2. Cinematics. The VFS resolves the `.bik` files that exist (`INTRO`, `LOGO_*`,
+   `DISCLAIMER01`); the runtime has no Bink decoder and the dump lacks
+   `VIDEODEMO.bik` and the `_ESM` movie variants. Needs a Bink decode path or
+   the missing assets, not path mapping.
+3. Phase 2 symbol names. Package/table/symbol counts are catalogued
+   (`docs/ue3-catalog.md`); the name maps are LZO-chunked in these cooked
+   packages, so actual class/function names still need an LZO decode.
+4. Launcher closes with no input while the machine is unattended (defensive veto
+   in place; not reproduced in a 4-minute idle run).
+5. `0xC0000005` seen once in the GPU plugin; not reproduced on the current build
+   (see the taxonomy above). Reopen if it reappears.
 
 ## Paths
 
@@ -864,5 +859,8 @@ Still open:
 | FSB5 audio parser/extractor | `tools/fsb5/fsb5.cpp` (build `tools/fsb5/build.ps1` → `tools/out/fsb5.exe`) |
 | FSB5 decode/play | `tools/fsb5/play.ps1` |
 | Host music player (runtime) | `src/audio/host_music.h` + `src/launcher/ocho_kart_app.h` |
+| Host music extraction | `tools/host-music.ps1` (uses `tools/out/fsb5.exe` + FFmpeg) |
+| UE3 package catalog | `tools/catalog/ue3_catalog.py` → `docs/ue3-catalog.md` |
 | Audio debugger (LLDB + PDBs) | `tools/debug-audio.ps1` + `tools/debug-audio/audio.lldb` (junction `C:\Users\israe\ocho_dump`) |
 | Signed imports | `docs/toolchain/xex-imports-signed.md` |
+| SDK patches | `patches/` (see `patches/README.md`) |
