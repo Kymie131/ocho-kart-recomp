@@ -22,7 +22,7 @@ param(
     [string]$RepoDir = "$env:USERPROFILE\Documents\ocho-kart-recomp",
     [string]$RepoUrl = 'https://github.com/Kymie131/ocho-kart-recomp.git',
     [string]$Branch = 'fix/sdk-kernel-setjmp-lzx-docs',
-    [string]$Bundle = "$env:USERPROFILE\Documents\PENDEJADAS DE ALAN\EL CHAVO KART\Claude outputs\ocho-kart-fixes.bundle",
+    [string]$Bundle = '',   # default: newest ocho-kart-fixes*.bundle next to this script, in OutDir or in Downloads
     [string]$OutDir = "$env:USERPROFILE\Documents\PENDEJADAS DE ALAN\EL CHAVO KART\Claude outputs",
     [string]$SdkInstallDir = "$env:ProgramData\rexglue-sdk-ocho",
     [string]$ProjectDir = "$env:ProgramData\rextools\proj-ocho-kart",
@@ -33,6 +33,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $started = Get-Date
+if (-not $Bundle) {
+    $searchDirs = @($PSScriptRoot, $OutDir, (Split-Path -Parent $OutDir), "$env:USERPROFILE\Downloads") |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+    $newest = $searchDirs | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter 'ocho-kart-fixes*.bundle' -File -ErrorAction SilentlyContinue } |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $Bundle = if ($newest) { $newest.FullName } else { Join-Path $OutDir 'ocho-kart-fixes.bundle' }
+}
+Write-Host "bundle: $Bundle"
 $transcript = Join-Path $OutDir 'setup-and-test.transcript.txt'
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 try { Start-Transcript -Path $transcript -Force | Out-Null } catch { }

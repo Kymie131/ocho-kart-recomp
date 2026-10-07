@@ -45,8 +45,11 @@ function Repair-GitSymlinks {
                 if ($item.LinkType) { continue }            # a real symlink already
                 if ($item.Length -gt 1024) { continue }     # already replaced by a copy
                 $target = (Get-Content -LiteralPath $path -Raw).Trim()
-                $resolved = Join-Path (Split-Path -Parent $path) $target
-                if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { continue }
+                if ($target -match '[\x00-\x1F<>"|?*]') { continue }   # not a link placeholder
+                try {
+                    $resolved = Join-Path (Split-Path -Parent $path) $target
+                    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { continue }
+                } catch { continue }
                 Copy-Item -LiteralPath $resolved -Destination $path -Force
                 & git -C $repo update-index --assume-unchanged -- $rel 2>$null
                 $fixed++
