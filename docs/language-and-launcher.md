@@ -51,10 +51,14 @@ Default for this project: Spanish (Mexico), `user_language 5`.
 
 ## Input devices
 
-Multiple backends already exist in the runtime (`sdl`, `xinput`, plus a keyboard/mouse
-driver and a NOP stand-in), selected by the `input_backend` cvar. A launcher device
-selector should expose that cvar and let the SDL driver handle the wide hardware range,
-rather than adding per-device code.
+The runtime supports SDL gamepads, XInput gamepads, and keyboard/mouse emulation. The
+gamepad backend is selected by `input_backend`; keyboard controls are independently
+enabled by `mnk_mode`. Keyboard emulation is on by default, feeds guest player 0 as a
+synthetic Xbox controller, and is also exposed as a launcher toggle. Default driving
+bindings are W/S for accelerate/brake and A/D to steer; Space is A, Backspace is B, E/Q
+are X/Y, R/F are the shoulders, Enter is Start, Tab is Back, and Shift+arrow keys are
+the D-pad. The bindings can also be changed through the runtime's
+`Input/Keybinds/Controller` settings.
 
 ## Launcher implementation
 

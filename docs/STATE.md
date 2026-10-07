@@ -1,6 +1,6 @@
-# State
+﻿# State
 
-Updated 2026-10-06 (second session). This file is the **current** picture only.
+Updated 2026-10-07. This file is the **current** picture only.
 The dated session-by-session log up to 2026-10-06 is kept unchanged in
 `docs/history/STATE-log-2026-10.md`; where it disagrees with this file, this
 file wins (see "Corrections" below).
@@ -17,7 +17,7 @@ file wins (see "Corrections" below).
 | 4 shaders | partial (Xenos → DXBC at runtime; 101 shaders / 87 pipelines seen in one race) |
 | 5 kernel shims / boot | done; boots past the intro with the Xenos GPU plugin |
 | 6 renderer | in progress |
-| 7 input / audio / stability | input stable; **guest audio silent** (host music covers it); kernel fixes below pending measurement |
+| 7 input / audio / stability | input stable; keyboard controls on by default (`mnk_mode`, W/S gas/brake, A/D steer, Space A, Backspace B); **guest audio silent** (host music covers it); kernel fixes below pending measurement |
 | 8 PC options | partial (fullscreen / vsync / resolution scale) |
 | 9 CI releases | partial (code-only tooling bundle on tag) |
 | 10 contributor docs | done |
@@ -191,3 +191,22 @@ above being created.
 | UE3 catalog | `tools/catalog/` → `docs/ue3-catalog.md` |
 | Audio debugger | `tools/debug-audio.ps1` |
 | Prior art (other ports) | `docs/prior-art.md` |
+
+## Keyboard controls for controller-free play (2026-10-07)
+
+The keyboard/mouse input driver was already implemented and attached to
+`InputSystem`, but `mnk_mode` defaulted to false and the launcher offered no way
+to enable it. Enabled keyboard-to-Xbox-controller emulation by default, changed
+the defaults to a kart-friendly PC layout, and added a persistent **Keyboard
+controls** toggle plus key hints to the launcher. Synthetic keyboard input feeds
+guest player 0; physical SDL/XInput pads remain assigned as before.
+
+Default keys: W/S accelerate/brake, A/D steer, Space A, Backspace B, E/Q X/Y,
+R/F shoulders, Enter Start, Tab Back, Shift+arrows D-pad. Keys are still
+remappable through the runtime's `Input/Keybinds/Controller` cvars/settings.
+The feature and launcher were deployed and built against the local SDK source
+(`tools/build.ps1 -SdkSourceDir ...`); building from source also required
+propagating ImGui's include path to host targets. A no-controller smoke run with
+`mnk_mode=true` stayed alive for 35 seconds; no keys were injected during that
+smoke run.
+

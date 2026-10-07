@@ -65,6 +65,8 @@ powershell -ExecutionPolicy Bypass -File tools/setup-and-test.ps1 -DumpPath "D:\
    ```
    powershell -File tools/build.ps1 -SdkDir "$env:ProgramData\rexglue-sdk-ocho"
    ```
+   The patched SDK carries this repo's keyboard-input defaults. Building straight
+   against the submodule source also works: `tools/build.ps1 -SdkSourceDir external/rexglue-sdk`.
 
 Re-run codegen whenever `tools/config/ocho_kart_manifest.toml` changes (it
 carries the `setjmp`/`longjmp` redirection and hand-registered functions).
@@ -77,7 +79,10 @@ powershell -File tools/run-game.ps1
 
 This launches `ocho_kart.exe --gpu_plugin xenos --user_language 5`. The Xenos
 GPU plugin is required for a picture. The pre-boot launcher lets you pick the
-language, controller icons, video options, and host music.
+language, controller icons, keyboard controls, video options, and host music.
+Keyboard controls are enabled by default: W/S accelerate/brake, A/D steer,
+Space=A, Backspace=B, E/Q=X/Y, R/F=shoulders, Enter=Start, Tab=Back. The
+in-game `Input/Keybinds/Controller` settings can remap them.
 
 Headless/skip the launcher with `REX_LAUNCHER_SKIP=true`. `-Trace` turns on the
 DPC, file-open and XMA traces; `-ExtraArgs` passes anything else.

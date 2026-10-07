@@ -60,6 +60,7 @@ inline const char* const* launcher_icon_values() {
 struct LauncherState {
   int language = 0;  // index into launcher_languages()
   int icons = 0;     // index into launcher_icon_names()
+  bool keyboard_controls = true;
   bool music = false;  // host-side background music (bypasses the silent guest mixer)
   bool fullscreen = false;
   bool vsync = true;
@@ -118,6 +119,7 @@ inline void launcher_load_from_cvars() {
   };
   st.fullscreen = read_bool("fullscreen", false);
   st.vsync = read_bool("vsync", true);
+  st.keyboard_controls = read_bool("mnk_mode", true);
   try {
     st.resolution_scale = std::stoi(rex::cvar::GetFlagByName("resolution_scale"));
   } catch (...) {
@@ -359,6 +361,11 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
       launcher_draw_button_preview(st.icons, ImGui::GetFontSize() * 0.7f);
 
       ImGui::Separator();
+      ImGui::Checkbox("Keyboard controls", &st.keyboard_controls);
+      ImGui::TextDisabled("W/S gas/brake, A/D steer, Space A, Backspace B, E/Q X/Y.");
+      ImGui::TextDisabled("R/F bumpers, Enter Start, Tab Back; Shift+arrows = D-pad.");
+
+      ImGui::Separator();
       ImGui::Checkbox("Background music (host)", &st.music);
       ImGui::TextDisabled("Plays the dump's own FSB music; needs host_music WAVs.");
 
@@ -410,6 +417,7 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
     const char* icon = launcher_icon_values()[st.icons];
     rex::cvar::SetFlagByName("user_language", std::to_string(lang_id));
     rex::cvar::SetFlagByName("launcher_button_icons", icon);
+    rex::cvar::SetFlagByName("mnk_mode", st.keyboard_controls ? "true" : "false");
     rex::cvar::SetFlagByName("host_music", st.music ? "true" : "false");
     rex::cvar::SetFlagByName("fullscreen", st.fullscreen ? "true" : "false");
     rex::cvar::SetFlagByName("vsync", st.vsync ? "true" : "false");
