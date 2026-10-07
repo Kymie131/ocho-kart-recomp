@@ -44,8 +44,18 @@ if ($LASTEXITCODE -eq 0) {
     exit 0
 }
 
-if ($StashLocalChanges -and (Invoke-Git -C $sdk status --porcelain)) {
-    Invoke-Git -C $sdk stash push --include-untracked -m "ocho-kart: before apply-sdk-patches $(Get-Date -Format s)"
+# The consolidated patch holds every local change, so an older version of it
+# (or hand edits it already contains) is replaced: stash the submodule edits as a
+# backup and apply the current patch on a clean tree.
+if (-not $StashLocalChanges) {
+    $null = Invoke-Git -C $sdk apply --check $patchPath
+    if ($LASTEXITCODE -ne 0 -and (Invoke-Git -C $sdk status --porcelain --untracked-files=no)) {
+        Write-Output "submodule has an older set of local edits; replacing them with $Patch"
+        $StashLocalChanges = $true
+    }
+}
+if ($StashLocalChanges -and (Invoke-Git -C $sdk status --porcelain --untracked-files=no)) {
+    Invoke-Git -C $sdk stash push -m "ocho-kart: before apply-sdk-patches $(Get-Date -Format s)"
     if ($LASTEXITCODE -ne 0) { throw "git stash failed in $sdk" }
     Write-Output "stashed previous submodule edits (git -C external/rexglue-sdk stash list)"
 }
