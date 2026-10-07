@@ -43,6 +43,15 @@ Direcciones del XEX descifrado; todas se instrumentan en `src/diag/fmod_diag.cpp
 | `0x82A23A48` | helper de error FMOD (`r3`=resultado, `r4`=expresión, `r6`=archivo, `r7`=línea) |
 | `0x8232EED8` | logger de checks/asserts de UE3 (expr, archivo, línea, fmt) |
 
+Descartado por lectura de código (2026-10-07): el orden de carga. `UFMODAudioDevice::Init`
+recorre todos los `UFMODProject` (`TObjectIterator`, clase `0x82A23300`) y les vuelve a
+llamar `PostLoad` (vtable `0x82239A08` + `0x18`), así que un proyecto cargado antes que
+el dispositivo se carga igual. El callback de apertura recibe `"<ptr del proyecto>/<banco>"`
+(`MediaPath` = puntero en `%lld`), busca el banco en la lista del proyecto (`+0x68`/`+0x6C`)
+y pide su tamaño a `GFileManager`; con la lista vacía devuelve error sin tocar disco.
+Sospechoso principal: `EventSystem::load` del FEV (resultado sin comprobar) deja el
+handle (`+0x3C`) en nulo y el script nunca pide los paquetes de sonido.
+
 Hipótesis a medir con una corrida `-Trace`: o `PostLoad` corre antes de que exista
 el audio device (y el proyecto FEV nunca se carga), o `EventSystem::load` falla, o
 los `UFMODSoundBank` nunca se registran y el callback de apertura rechaza el banco.
