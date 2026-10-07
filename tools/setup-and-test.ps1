@@ -33,6 +33,33 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $started = Get-Date
+
+# The SDK and the analysis project live under %ProgramData%. Files there that an
+# elevated run created can only be overwritten by an elevated run ("cannot set
+# permissions ... Permission denied" at the SDK install step). Relaunch elevated
+# when that is the case, with the same arguments.
+function Test-DirWritable([string]$dir) {
+    if (-not (Test-Path -LiteralPath $dir)) { return $true }
+    $probe = @(Get-ChildItem -LiteralPath $dir -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1)
+    try {
+        if ($probe.Count) { $fs = [IO.File]::Open($probe[0].FullName, 'Open', 'ReadWrite', 'ReadWrite'); $fs.Close() }
+        $t = Join-Path $dir ".write-test-$PID"; [IO.File]::WriteAllText($t, 'x'); Remove-Item -LiteralPath $t -Force
+        return $true
+    } catch { return $false }
+}
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin -and -not ((Test-DirWritable $SdkInstallDir) -and (Test-DirWritable $ProjectDir))) {
+    Write-Host "The SDK/project folders under $env:ProgramData were created by an administrator run;"
+    Write-Host 'reopening this script as administrator (accept the Windows prompt)...'
+    $argList = @('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+    foreach ($kv in $PSBoundParameters.GetEnumerator()) {
+        if ($kv.Value -is [switch]) { if ($kv.Value) { $argList += "-$($kv.Key)" } }
+        else { $argList += "-$($kv.Key)"; $argList += "`"$($kv.Value)`"" }
+    }
+    Start-Process powershell -Verb RunAs -ArgumentList $argList -WorkingDirectory $PWD.Path
+    exit 0
+}
 if (-not $Bundle) {
     $searchDirs = @($PSScriptRoot, $OutDir, (Split-Path -Parent $OutDir), "$env:USERPROFILE\Downloads") |
         Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
