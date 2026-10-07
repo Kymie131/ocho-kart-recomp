@@ -72,6 +72,15 @@ resultado de un callee, así que algún callee recompilado devuelve un valor que
 debería. `src/diag/fmod_load_trace.cpp` engancha las 159 funciones FMOD bajo esa
 llamada (profundidad ≤ 5) y registra args y `r3` (`FMODTRACE`) para localizarlo.
 
+**Segunda corrida (13:07)**: el FEV es `RIFF....FEV FMT ` (ruta RIFF, `0x82FAE710`).
+El valor `0x7018A5B0` es exactamente `r1+0xA0` del marco de `0x82FAE710`, la
+dirección del objeto visitante (vtable `0x82077870`) que se pasa a `0x82FBF9A0`;
+esa función devuelve el resultado del primer callee que no dé 0, así que algún
+callee (directo o por vtable) devuelve el puntero del visitante en lugar de un
+`FMOD_RESULT`. El tracer de 159 funciones se quedó sin presupuesto (3020 lecturas)
+antes de llegar ahí; ahora envuelve las 5912 funciones del rango FMOD y marca como
+`FMODSUS` cualquier retorno con pinta de dirección de pila.
+
 Hipótesis a medir con una corrida `-Trace`: o `PostLoad` corre antes de que exista
 el audio device (y el proyecto FEV nunca se carga), o `EventSystem::load` falla, o
 los `UFMODSoundBank` nunca se registran y el callback de apertura rechaza el banco.
