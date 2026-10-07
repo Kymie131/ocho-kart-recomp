@@ -1,6 +1,24 @@
 ﻿# State
 
-Updated 2026-10-06.
+Updated 2026-10-07.
+
+## Keyboard controls for controller-free play (2026-10-07)
+
+The keyboard/mouse input driver was already implemented and attached to
+`InputSystem`, but `mnk_mode` defaulted to false and the launcher offered no way
+to enable it. Enabled keyboard-to-Xbox-controller emulation by default, changed
+the defaults to a kart-friendly PC layout, and added a persistent **Keyboard
+controls** toggle plus key hints to the launcher. Synthetic keyboard input feeds
+guest player 0; physical SDL/XInput pads remain assigned as before.
+
+Default keys: W/S accelerate/brake, A/D steer, Space A, Backspace B, E/Q X/Y,
+R/F shoulders, Enter Start, Tab Back, Shift+arrows D-pad. Keys are still
+remappable through the runtime's `Input/Keybinds/Controller` cvars/settings.
+The feature and launcher were deployed and built against the local SDK source
+(`tools/build.ps1 -SdkSourceDir ...`); building from source also required
+propagating ImGui's include path to host targets. A no-controller smoke run with
+`mnk_mode=true` stayed alive for 35 seconds; no keys were injected during that
+smoke run.
 
 ## Session: tooling, host music, Phase 2 catalog (2026-10-06)
 

@@ -11,8 +11,8 @@ committed. Nothing here ships game content.
   You must own the game; do not upload or share it.
 - Visual Studio 2022 **Build Tools** (MSVC headers; no IDE needed).
 - LLVM/Clang (the built-in VS clang works), Ninja, CMake 3.25+.
-- The ReXGlue toolkit: `rexglue.exe` v0.10.0 and the prebuilt SDK package
-  (`rexglue-sdk-bin`, e.g. under `C:\ProgramData\rexglue-sdk-bin`).
+- The ReXGlue toolkit: `rexglue.exe` v0.10.0 and either the prebuilt SDK package
+  (`rexglue-sdk-bin`) or the initialized `external/rexglue-sdk` submodule.
 - (Optional) FFmpeg on `PATH` for the host-side music extraction.
 
 ## Layout on disk
@@ -41,8 +41,10 @@ via `tools/`.
    ```
 3. Build:
    ```
-   powershell -File tools/build.ps1
+   powershell -File tools/build.ps1 -SdkSourceDir "external/rexglue-sdk"
    ```
+   Building from source applies this repo's keyboard-input defaults. The normal
+   prebuilt-SDK path remains available with `powershell -File tools/build.ps1`.
 
 ## Run
 
@@ -52,7 +54,10 @@ powershell -File tools/run-game.ps1
 
 This launches `ocho_kart.exe --gpu_plugin xenos --user_language 5`. The Xenos
 GPU plugin is required for a picture. The pre-boot launcher lets you pick the
-language, controller icons, video options, and host music.
+language, controller icons, keyboard controls, video options, and host music.
+Keyboard controls are enabled by default: W/S accelerate/brake, A/D steer,
+Space=A, Backspace=B, E/Q=X/Y, R/F=shoulders, Enter=Start, Tab=Back. The
+in-game `Input/Keybinds/Controller` settings can remap them.
 
 Headless/skip the launcher with `REX_LAUNCHER_SKIP=true`.
 
