@@ -52,6 +52,26 @@ y pide su tamaño a `GFileManager`; con la lista vacía devuelve error sin tocar
 Sospechoso principal: `EventSystem::load` del FEV (resultado sin comprobar) deja el
 handle (`+0x3C`) en nulo y el script nunca pide los paquetes de sonido.
 
+**Medido (corrida 2026-10-07 12:49, `--fmod_diag`)** — confirma el sospechoso:
+
+```
+UFMODSoundBank::Serialize ×15 (entries=1 cada uno)
+UFMODProject::PostLoad   GEngine=0 → se salta (antes del device)
+EventSystem_Create -> 0 ; EventSystem::init(1024, 0x82) -> 0
+UFMODProject::PostLoad   (re-ejecutado por AudioDevice::Init) GEngine/client OK
+EventSystem::setMediaPath('1084541184:') -> 0
+EventSystem::load(data=01B80000, len=472844) -> 0x7018A5B0  project=00000000
+AudioDevice::Init -> 1
+```
+
+`EventSystem::load` devuelve **basura** (`0x7018A5B0`, parece una dirección de
+pila, no un `FMOD_RESULT`) y el handle del proyecto queda nulo; sin proyecto el
+título nunca pide bancos. La implementación es `EventSystemI::load` `0x82FAECD8`
+(vtable `0x82077958`+`0x70`); todas sus salidas ponen `r3` a una constante o al
+resultado de un callee, así que algún callee recompilado devuelve un valor que no
+debería. `src/diag/fmod_load_trace.cpp` engancha las 159 funciones FMOD bajo esa
+llamada (profundidad ≤ 5) y registra args y `r3` (`FMODTRACE`) para localizarlo.
+
 Hipótesis a medir con una corrida `-Trace`: o `PostLoad` corre antes de que exista
 el audio device (y el proyecto FEV nunca se carga), o `EventSystem::load` falla, o
 los `UFMODSoundBank` nunca se registran y el callback de apertura rechaza el banco.
