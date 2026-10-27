@@ -24,7 +24,10 @@ param(
     [string]$ProjectDir = "$env:ProgramData\rextools\proj-ocho-kart",
     [int]$Language = 5,
     [ValidateSet('info','debug','trace')][string]$LogLevel = 'debug',
-    [switch]$NoMusic,
+    # The game's own FMOD audio works since the manifest fix for 0x82FBFC38;
+    # the host-side WAV player is now opt-in (it would double the music).
+    [switch]$HostMusic,
+    [switch]$NoMusic,   # kept for old command lines; host music is off by default
     # Diagnostics for the audio investigation (docs/STATE.md, "Next").
     [switch]$Trace,
     [string[]]$ExtraArgs = @(),
@@ -48,11 +51,11 @@ if (-not (Test-Path -LiteralPath $plugin)) {
 }
 if (-not (Test-Path -LiteralPath (Join-Path $DumpPath 'default.xex'))) { throw "default.xex not found under: $DumpPath" }
 
-# The guest mixer is silent upstream; make sure the host music tracks exist so
-# the runtime can play them. Skipped when FFmpeg is unavailable.
+# Optional host-side music (-HostMusic): make sure the tracks exist so the
+# runtime can play them. Skipped when FFmpeg is unavailable.
 $hostMusic = Join-Path $DumpPath 'host_music'
 $extra = @()
-if (-not $NoMusic) {
+if ($HostMusic -and -not $NoMusic) {
     if (-not (Test-Path -LiteralPath (Join-Path $hostMusic 'menu.wav'))) {
         $ff = Get-Command ffmpeg -ErrorAction SilentlyContinue
         if ($ff) {

@@ -204,6 +204,13 @@ if (-not $SkipBuild) {
     }
     & (Join-Path $tools 'run-codegen.ps1') -DumpPath $DumpPath -ProjectDir $ProjectDir -ReXGlue $rexglue -Force
     if ($LASTEXITCODE -ne 0) { throw "codegen failed ($LASTEXITCODE)" }
+    # Functions cut short by a too-small manifest `size` return garbage silently
+    # (that is what kept the game's sound off). Stop here if any remain.
+    $py = Get-Command python -ErrorAction SilentlyContinue
+    if ($py) {
+        & $py.Source (Join-Path $tools 'check_generated.py') (Join-Path $ProjectDir 'generated')
+        if ($LASTEXITCODE -eq 1) { throw "generated code has functions cut short (see above); fix tools/config/ocho_kart_manifest.toml" }
+    }
     & (Join-Path $tools 'install-launcher.ps1') -ProjectDir $ProjectDir
     & (Join-Path $tools 'build.ps1') -ProjectDir $ProjectDir -SdkDir $SdkInstallDir
 }

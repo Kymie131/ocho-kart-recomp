@@ -64,6 +64,18 @@ if ($diagFiles.Count) {
         Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $diagDir $f.Name) -Force
         Write-Output "diagnostics deployed: $diagDir\$($f.Name)"
     }
+    # Drop diagnostics that were removed from the repo (and their CMake lines).
+    $keep = $diagFiles | ForEach-Object { $_.Name }
+    foreach ($old in @(Get-ChildItem -LiteralPath $diagDir -Filter '*.cpp' -File -ErrorAction SilentlyContinue)) {
+        if ($keep -contains $old.Name) { continue }
+        Remove-Item -LiteralPath $old.FullName -Force
+        Write-Output "removed stale diagnostics: $($old.Name)"
+        if (Test-Path -LiteralPath $cml) {
+            $text = Get-Content -LiteralPath $cml -Raw
+            $new = ([regex]('(?m)^[ \t]*src/diag/' + [regex]::Escape($old.Name) + '[ \t]*\r?\n')).Replace($text, '')
+            if ($new -ne $text) { Set-Content -LiteralPath $cml -Value $new -Encoding UTF8 -NoNewline }
+        }
+    }
     if (Test-Path -LiteralPath $cml) {
         foreach ($f in $diagFiles) {
             $text = Get-Content -LiteralPath $cml -Raw

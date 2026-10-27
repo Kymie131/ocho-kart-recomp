@@ -25,6 +25,46 @@ viejas sin evidencia nueva medible.**
   `UFMODLoadingSet::execLoad` / `UFMODMusicSystem::execPromptCue` y ver si se
   crean los hilos de FMOD.
 
+## CAUSA REAL Y ARREGLO (2026-10-27)
+
+**El manifiesto truncaba un thunk de FMOD.** `tools/config/ocho_kart_manifest.toml`
+tenía `0x82FBFC38 = { name = "vtable_thunk_tail_82FBFC38", size = 4 }`. El código
+real en esa dirección es un thunk de 16 bytes:
+
+```
+0x82FBFC38 lwz r11,0(r3) ; lwz r11,0x38(r11) ; mtctr r11 ; bctr
+```
+
+Con `size = 4` el codegen emitió solo el primer `lwz` y la función terminaba ahí,
+**sin hacer la llamada virtual**, devolviendo `r3` intacto (el puntero del objeto
+visitante). Cadena exacta durante la carga del FEV:
+
+```
+UFMODProject::PostLoad -> EventSystem::load (0x82F9A7B0)
+  -> EventSystemI::load (0x82FAECD8) -> loader RIFF (0x82FAE710)
+  -> visit (0x82FBF9A0) -> accept (0x82FCCD78: swap r3/r4; b 0x82FBFC38)
+  -> 0x82FBFC38 truncado: devuelve r3 = visitante = 0x7018A5B0
+```
+
+`0x82FBF9A0` trata cualquier valor ≠ 0 como error y lo propaga, así que
+`EventSystem::load` devolvía `0x7018A5B0`, el handle del proyecto quedaba nulo y
+el juego **nunca pedía sus bancos de sonido**: sin voces, sin motor, sin ambiente
+y sin música de FMOD. FMOD, XAudio, XMA y el VFS estaban bien todo el tiempo.
+
+Arreglo: `size = 16`. Un barrido de todo el código generado
+(`tools/check_generated.py`, ahora se ejecuta tras el codegen en
+`setup-and-test.ps1`) encontró otras dos entradas manuales igual de truncadas,
+también corregidas: `0x832C3910` (16 → 228) y `0x832D9690` (16 → 92). Se quitó
+`0x82FBFC2C` (empezaba a mitad del thunk `0x82FBFC28`). Regenerado en Linux con
+el manifiesto corregido: 0 funciones cortadas, `vtable_thunk_82FBFC38` completo.
+
+Pista que llevó aquí: el port Android de codepdbh (`el-chavo-kart-android`) usa
+otra fase GapFill que corta en `bctr` incondicional y no necesita esas entradas
+manuales.
+
+La música host (`host_music`) queda como opción (`run-game.ps1 -HostMusic`);
+apagada por defecto para no duplicar la música del juego.
+
 ## Ruta FMOD del título (RE estático, 2026-10-06)
 
 Direcciones del XEX descifrado; todas se instrumentan en `src/diag/fmod_diag.cpp`

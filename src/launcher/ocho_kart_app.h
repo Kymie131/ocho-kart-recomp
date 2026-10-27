@@ -61,7 +61,7 @@ struct LauncherState {
   int language = 0;  // index into launcher_languages()
   int icons = 0;     // index into launcher_icon_names()
   bool keyboard_controls = true;
-  bool music = false;  // host-side background music (bypasses the silent guest mixer)
+  bool music = false;  // host-side background music (optional fallback; the game has its own audio)
   bool fullscreen = false;
   bool vsync = true;
   int resolution_scale = 1;
@@ -367,7 +367,7 @@ class LauncherDialog : public rex::ui::ImGuiDialog {
 
       ImGui::Separator();
       ImGui::Checkbox("Background music (host)", &st.music);
-      ImGui::TextDisabled("Plays the dump's own FSB music; needs host_music WAVs.");
+      ImGui::TextDisabled("Extra copy of the music played by the PC; leave off (the game has sound).");
 
       ImGui::Separator();
       ImGui::TextUnformatted("Video");
@@ -483,15 +483,10 @@ class OchoKartApp : public rex::ReXApp {
       std::snprintf(st.dump, sizeof(st.dump), "%s", current.c_str());
     }
 
-    // Default the host-music toggle on when the dump already has extracted
-    // tracks (tools/host-music.ps1), off otherwise. The cvar still wins if it
-    // was explicitly enabled.
-    {
-      const bool has_tracks =
-          std::filesystem::exists(defaults.game_data_root / "host_music" / "menu.wav") ||
-          std::filesystem::exists(defaults.game_data_root / "host_music" / "race.wav");
-      st.music = has_tracks || rex::cvar::GetFlagByName("host_music") == "true";
-    }
+    // Host-side music is a fallback from when the game's own FMOD audio was
+    // silent (fixed: manifest entry 0x82FBFC38). Off unless explicitly enabled,
+    // otherwise it plays on top of the game's music.
+    st.music = rex::cvar::GetFlagByName("host_music") == "true";
 
     resume_ = std::move(resume);
     defaults_ = defaults;

@@ -41,8 +41,13 @@ setjmp_address = 0x830BDFB0
 # NOTE: entry is the THUNK START (the lwz), not the trailing bctr.
 [entrypoint.functions]
 0x82FBFBC0 = { name = "vtable_thunk_82FBFBC0", size = 16 }
-0x82FBFC2C = { name = "vtable_thunk_82FBFC2C", size = 12 }
-0x82FBFC38 = { name = "vtable_thunk_tail_82FBFC38", size = 4 }
+# Was "size = 4": the generated function stopped after the first lwz and returned
+# with r3 still = the visitor object, so FMOD's FEV loader (EventSystemI::load ->
+# 0x82FAE710 -> 0x82FBF9A0 -> 0x82FCCD78 -> here) got a pointer back as its
+# FMOD_RESULT, the project handle stayed null and no sound bank was ever opened.
+# (The bogus 0x82FBFC2C entry started mid-thunk; the real thunk at 0x82FBFC28 is
+# found by the analyzer.)
+0x82FBFC38 = { name = "vtable_thunk_82FBFC38", size = 16 }
 0x82FBFCE8 = { name = "vtable_thunk_82FBFCE8", size = 16 }
 0x82FBFCF8 = { name = "vtable_thunk_82FBFCF8", size = 16 }
 0x82FBFD08 = { name = "vtable_thunk_82FBFD08", size = 16 }
@@ -91,8 +96,8 @@ setjmp_address = 0x830BDFB0
 
 # real .text sequences the analyzer could not start at
 0x82E4D8D8 = { name = "code_82E4D8D8_branch", size = 8 }
-0x832C3910 = { name = "code_832C3910_fpload", size = 16 }
-0x832D9690 = { name = "code_832D9690_lwzchain", size = 16 }
+0x832C3910 = { name = "code_832C3910_fpload", size = 228 }   # was 16: fell off the end (real end: blr at 0x832C39F0)
+0x832D9690 = { name = "code_832D9690_lwzchain", size = 92 }   # was 16: fell off the end (blr at 0x832D96E8; 0x832D96EC is its own entry)
 0x82B3F920 = { name = "sub_82B3F920_peel", size = 8 }
 0x82A8E828 = { name = "sub_82A8E828_peel", size = 16 }
 0x82A62EE8 = { name = "sub_82A62EE8_peel", size = 16 }
